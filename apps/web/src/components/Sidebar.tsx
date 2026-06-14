@@ -4,6 +4,7 @@ import { groupRunsByWorkflow } from '../types';
 import type { UserRole } from '@blamr/types';
 import { getWorkflowCounts } from '../utils/runs';
 import { BlamrStatusDot } from './BlamrStatusBadge';
+import { BlamrLogo } from './BlamrLogo';
 import { IconSearch, IconList, IconAlert, IconCheck, IconLink, IconSettings } from './icons';
 
 interface SidebarProps {
@@ -78,7 +79,7 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="logo-wrap">
-        <span className="logo-text">blamr</span>
+        <BlamrLogo variant="full" className="logo-mark" />
         <span className="pulse-dot" />
       </div>
 

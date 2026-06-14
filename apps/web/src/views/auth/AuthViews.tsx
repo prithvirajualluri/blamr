@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchInvitePreview } from '../../api/auth';
+import { BlamrLogo } from '../../components/BlamrLogo';
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-logo">blamr</div>
+        <BlamrLogo variant="full" className="auth-logo" />
         <h1 className="auth-title">{title}</h1>
         {subtitle && <p className="auth-subtitle">{subtitle}</p>}
         {children}

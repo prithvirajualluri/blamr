@@ -167,7 +167,7 @@ await emitter.emitEdge({
   input_preview: 'user input…',
   output_preview: 'agent output…',
 });
-await emitter.completeRun({ status: 'success' });
+await emitter.completeRun({ businessFailed: false });
 ```
 
 ### Environment

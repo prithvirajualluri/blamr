@@ -1,6 +1,10 @@
 # blamr
 
-[![CI](https://github.com/blamr-ai/blamr/actions/workflows/ci.yml/badge.svg)](https://github.com/blamr-ai/blamr/actions/workflows/ci.yml)
+<p align="center">
+  <img src="blamr_logo.svg" alt="blamr — causal intelligence for multi-agent AI" width="360" />
+</p>
+
+[![CI](https://github.com/prithvirajualluri/blamr/actions/workflows/ci.yml/badge.svg)](https://github.com/prithvirajualluri/blamr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **Causal intelligence platform for multi-agent AI systems.**
@@ -89,12 +93,15 @@ Runs unit tests in `@blamr/types`, `@blamr/sdk`, and `@blamr/web` (confidence ga
 
 ### SDK (3 lines)
 
+Point agents at the **ingest** service (`BLAMR_ENDPOINT`, default `http://localhost:3001/v1`) — not the dashboard API on `:3000`.
+
 ```typescript
 import { BlamrEmitter } from '@blamr/sdk';
 
 const emitter = new BlamrEmitter(
   { workflowId: 'customer-support', agentId: 'intent_classifier' },
   process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? 'http://localhost:3001/v1',
 );
 
 emitter.startRun();
@@ -113,7 +120,7 @@ await emitter.emitEdge({
   input_preview: 'User question…',
   output_preview: 'Classified as billing…',
 });
-await emitter.completeRun({ status: 'success' });
+await emitter.completeRun({ businessFailed: false });
 ```
 
 Emit full causal edges (with I/O previews for semantic drift):
@@ -124,6 +131,7 @@ import { BlamrEmitter } from '@blamr/sdk';
 const emitter = new BlamrEmitter(
   { workflowId: 'my-workflow', agentId: 'my_agent' },
   process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? 'http://localhost:3001/v1',
 );
 
 emitter.startRun();
@@ -158,6 +166,7 @@ const emitter = new BlamrEmitter(
     },
   },
   process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? 'http://localhost:3001/v1',
 );
 
 // … emit edges …
