@@ -67,7 +67,7 @@ body {
   display: flex; align-items: center; gap: 8px; flex-shrink: 0;
 }
 .logo-icon { flex-shrink: 0; display: block; }
-.logo-mark { flex: 1; min-width: 0; height: auto; max-width: 120px; display: block; }
+.logo-mark { flex: 1; min-width: 0; height: auto; max-width: 136px; display: block; }
 .logo-text { font-family: var(--mono); font-size: 19px; font-weight: 700; letter-spacing: -1px; color: var(--wh); }
 .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cy); animation: pls 2s infinite; flex-shrink: 0; }
 @keyframes pls { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } }
@@ -361,10 +361,24 @@ body {
 }
 .auth-logo {
   display: block;
-  width: min(100%, 220px);
+  width: min(100%, 200px);
   height: auto;
   margin: 0 auto 20px;
 }
+.auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mu);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.auth-back:hover { color: var(--cyL); }
 .auth-title {
   margin: 0 0 6px;
   font-size: 20px;

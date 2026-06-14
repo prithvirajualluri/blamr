@@ -1,7 +1,7 @@
 # blamr
 
 <p align="center">
-  <img src="blamr_logo.svg" alt="blamr — causal intelligence for multi-agent AI" width="360" />
+  <img src="blamr_logo.svg" alt="blamr — causal intelligence for multi-agent AI" width="320" />
 </p>
 
 [![CI](https://github.com/prithvirajualluri/blamr/actions/workflows/ci.yml/badge.svg)](https://github.com/prithvirajualluri/blamr/actions/workflows/ci.yml)

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/svg+xml" href="blamr_favicon.svg" />
-  <title>blamr favicon — size preview</title>
+  <title>blamr brand assets — preview</title>
   <style>
     :root {
       --bg: #070D1A;
@@ -19,11 +19,8 @@
       min-height: 100vh;
       padding: 32px 24px 48px;
     }
-    h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 6px;
-    }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    h2 { font-size: 14px; font-weight: 600; margin: 28px 0 12px; color: #CBD5E1; }
     p {
       color: var(--text);
       font-size: 13px;
@@ -31,11 +28,7 @@
       max-width: 640px;
       margin-bottom: 24px;
     }
-    code {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: #22D3EE;
-    }
+    code { font-family: var(--mono); font-size: 12px; color: #22D3EE; }
     .wrap {
       display: flex;
       gap: 32px;
@@ -65,17 +58,6 @@
     }
     .on-dark { background: #070D1A; }
     .on-light { background: #F8FAFC; }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
     .usage {
       margin-top: 8px;
       padding: 16px;
@@ -94,118 +76,67 @@
   </style>
 </head>
 <body>
-  <h1>blamr favicon</h1>
+  <h1>blamr brand assets</h1>
   <p>
-    Canonical asset: <code>blamr_favicon.svg</code> (64×64, rounded dark tile).
-    Used by the web app at <code>/favicon.svg</code>. Sizes below show how the mark reads at common favicon dimensions.
+    Canonical files: <code>blamr_logo.svg</code> (wordmark + mark),
+    <code>blamr_favicon.svg</code> (64×64 app tile),
+    <code>blamr_icon.svg</code> (mark only, transparent).
   </p>
 
-  <h2 class="sr-only">blamr favicon designs at 512px, 64px, 32px, and 16px with dark and light background variants</h2>
-
+  <h2>Full logo</h2>
   <div class="wrap">
     <div class="tile">
-      <div class="on-dark">
-        <svg width="120" height="120" viewBox="0 0 64 64" role="img" aria-hidden="true">
-          <rect width="64" height="64" rx="14" fill="#0D1627"/>
-          <circle cx="16" cy="32" r="9" fill="rgba(220,38,38,0.18)" stroke="#DC2626" stroke-width="2"/>
-          <circle cx="16" cy="32" r="12" fill="none" stroke="#DC2626" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.5"/>
-          <circle cx="32" cy="19" r="6.5" fill="rgba(8,145,178,0.12)" stroke="#0891B2" stroke-width="1.5"/>
-          <circle cx="32" cy="45" r="6.5" fill="rgba(30,48,80,0.8)" stroke="#1E3050" stroke-width="1.2"/>
-          <circle cx="50" cy="32" r="6.5" fill="rgba(220,38,38,0.12)" stroke="#DC2626" stroke-width="1.5"/>
-          <line x1="24.5" y1="27" x2="26" y2="24" stroke="#DC2626" stroke-width="1.8" opacity="0.9"/>
-          <line x1="24.5" y1="37" x2="26" y2="40" stroke="#DC2626" stroke-width="1.4" opacity="0.6"/>
-          <line x1="38" y1="22" x2="44" y2="28" stroke="#0891B2" stroke-width="1.3" opacity="0.7"/>
-          <line x1="38" y1="42" x2="44" y2="36" stroke="#475569" stroke-width="1.1" opacity="0.5"/>
-          <text x="16" y="35" text-anchor="middle" font-family="ui-monospace, monospace" font-size="6" font-weight="700" fill="#FCA5A5">89%</text>
-          <text x="50" y="35" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" font-weight="700" fill="#FCA5A5">✗</text>
-        </svg>
-      </div>
-      <div class="lbl">512 · dark bg</div>
+      <div class="on-dark"><img src="blamr_logo.svg" width="320" height="70" alt="blamr logo on dark" /></div>
+      <div class="lbl">320px · dark</div>
     </div>
-
     <div class="tile">
-      <div class="on-light">
-        <svg width="120" height="120" viewBox="0 0 64 64" role="img" aria-hidden="true">
-          <rect width="64" height="64" rx="14" fill="#0D1627"/>
-          <circle cx="16" cy="32" r="9" fill="rgba(220,38,38,0.18)" stroke="#DC2626" stroke-width="2"/>
-          <circle cx="16" cy="32" r="12" fill="none" stroke="#DC2626" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.5"/>
-          <circle cx="32" cy="19" r="6.5" fill="rgba(8,145,178,0.12)" stroke="#0891B2" stroke-width="1.5"/>
-          <circle cx="32" cy="45" r="6.5" fill="rgba(30,48,80,0.8)" stroke="#1E3050" stroke-width="1.2"/>
-          <circle cx="50" cy="32" r="6.5" fill="rgba(220,38,38,0.12)" stroke="#DC2626" stroke-width="1.5"/>
-          <line x1="24.5" y1="27" x2="26" y2="24" stroke="#DC2626" stroke-width="1.8" opacity="0.9"/>
-          <line x1="24.5" y1="37" x2="26" y2="40" stroke="#DC2626" stroke-width="1.4" opacity="0.6"/>
-          <line x1="38" y1="22" x2="44" y2="28" stroke="#0891B2" stroke-width="1.3" opacity="0.7"/>
-          <line x1="38" y1="42" x2="44" y2="36" stroke="#475569" stroke-width="1.1" opacity="0.5"/>
-          <text x="16" y="35" text-anchor="middle" font-family="ui-monospace, monospace" font-size="6" font-weight="700" fill="#FCA5A5">89%</text>
-          <text x="50" y="35" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" font-weight="700" fill="#FCA5A5">✗</text>
-        </svg>
-      </div>
-      <div class="lbl">512 · light bg</div>
+      <div class="on-light"><img src="blamr_logo.svg" width="320" height="70" alt="blamr logo on light" /></div>
+      <div class="lbl">320px · light</div>
     </div>
+  </div>
 
+  <h2>Favicon</h2>
+  <div class="wrap">
     <div class="tile">
-      <div class="on-dark">
-        <img src="blamr_favicon.svg" width="64" height="64" alt="64px favicon" />
-      </div>
+      <div class="on-dark"><img src="blamr_favicon.svg" width="120" height="120" alt="120px favicon" /></div>
+      <div class="lbl">120px</div>
+    </div>
+    <div class="tile">
+      <div class="on-dark"><img src="blamr_favicon.svg" width="64" height="64" alt="64px favicon" /></div>
       <div class="lbl">64px · canonical</div>
     </div>
-
     <div class="tile">
-      <div class="on-dark">
-        <svg width="32" height="32" viewBox="0 0 32 32" role="img" aria-hidden="true">
-          <rect width="32" height="32" rx="7" fill="#0D1627"/>
-          <circle cx="8" cy="16" r="5.5" fill="rgba(220,38,38,0.22)" stroke="#DC2626" stroke-width="1.8"/>
-          <circle cx="16" cy="10" r="4" fill="rgba(8,145,178,0.15)" stroke="#0891B2" stroke-width="1.2"/>
-          <circle cx="16" cy="22" r="4" fill="#0D1627" stroke="#1E3050" stroke-width="1"/>
-          <circle cx="25" cy="16" r="4" fill="rgba(220,38,38,0.15)" stroke="#DC2626" stroke-width="1.2"/>
-          <line x1="13" y1="14" x2="13" y2="13" stroke="#DC2626" stroke-width="1.5" opacity="0.9"/>
-          <line x1="13" y1="18" x2="13" y2="19" stroke="#DC2626" stroke-width="1.2" opacity="0.6"/>
-          <line x1="20" y1="12" x2="22" y2="14" stroke="#0891B2" stroke-width="1.1" opacity="0.7"/>
-          <line x1="20" y1="20" x2="22" y2="18" stroke="#475569" stroke-width="1" opacity="0.5"/>
-        </svg>
-      </div>
+      <div class="on-dark"><img src="blamr_favicon.svg" width="32" height="32" alt="32px favicon" /></div>
       <div class="lbl">32px</div>
     </div>
-
     <div class="tile">
-      <div class="on-dark">
-        <svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-hidden="true">
-          <rect width="16" height="16" rx="3" fill="#0D1627"/>
-          <circle cx="4" cy="8" r="3" fill="#DC2626" opacity="0.85"/>
-          <circle cx="9" cy="5" r="2" fill="#0891B2" opacity="0.7"/>
-          <circle cx="9" cy="11" r="2" fill="#1E3050"/>
-          <circle cx="13" cy="8" r="2" fill="#DC2626" opacity="0.6"/>
-          <line x1="7" y1="7" x2="8" y2="6" stroke="#DC2626" stroke-width="1" opacity="0.9"/>
-          <line x1="7" y1="9" x2="8" y2="10" stroke="#DC2626" stroke-width="1" opacity="0.6"/>
-          <line x1="11" y1="6" x2="12" y2="7" stroke="#0891B2" stroke-width="0.8"/>
-          <line x1="11" y1="10" x2="12" y2="9" stroke="#475569" stroke-width="0.8"/>
-        </svg>
-      </div>
+      <div class="on-dark"><img src="blamr_favicon.svg" width="16" height="16" alt="16px favicon" /></div>
       <div class="lbl">16px</div>
     </div>
-
     <div class="tile">
-      <div class="on-light">
-        <svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-hidden="true">
-          <rect width="16" height="16" rx="3" fill="#0D1627"/>
-          <circle cx="4" cy="8" r="3" fill="#DC2626" opacity="0.85"/>
-          <circle cx="9" cy="5" r="2" fill="#0891B2" opacity="0.7"/>
-          <circle cx="9" cy="11" r="2" fill="#1E3050"/>
-          <circle cx="13" cy="8" r="2" fill="#DC2626" opacity="0.6"/>
-          <line x1="7" y1="7" x2="8" y2="6" stroke="#DC2626" stroke-width="1" opacity="0.9"/>
-          <line x1="7" y1="9" x2="8" y2="10" stroke="#DC2626" stroke-width="1" opacity="0.6"/>
-          <line x1="11" y1="6" x2="12" y2="7" stroke="#0891B2" stroke-width="0.8"/>
-          <line x1="11" y1="10" x2="12" y2="9" stroke="#475569" stroke-width="0.8"/>
-        </svg>
-      </div>
-      <div class="lbl">16px · light bg</div>
+      <div class="on-light"><img src="blamr_favicon.svg" width="16" height="16" alt="16px favicon on light" /></div>
+      <div class="lbl">16px · light</div>
+    </div>
+  </div>
+
+  <h2>Icon mark (transparent)</h2>
+  <div class="wrap">
+    <div class="tile">
+      <div class="on-dark"><img src="blamr_icon.svg" width="104" height="64" alt="icon mark" /></div>
+      <div class="lbl">52×32 viewBox</div>
+    </div>
+    <div class="tile">
+      <div class="on-light"><img src="blamr_icon.svg" width="104" height="64" alt="icon mark on light" /></div>
+      <div class="lbl">light bg</div>
     </div>
   </div>
 
   <div class="usage">
     <pre>&lt;link rel="icon" type="image/svg+xml" href="/favicon.svg" /&gt;
 &lt;link rel="icon" type="image/svg+xml" href="/blamr_favicon.svg" /&gt;
-&lt;link rel="apple-touch-icon" href="/blamr_favicon.svg" /&gt;</pre>
+&lt;link rel="apple-touch-icon" href="/blamr_favicon.svg" /&gt;
+&lt;img src="/blamr_logo.svg" alt="blamr" width="182" height="40" /&gt;
+&lt;img src="/blamr_icon.svg" alt="" width="32" height="20" /&gt;</pre>
   </div>
 </body>
 </html>

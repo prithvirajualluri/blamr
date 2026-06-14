@@ -1,0 +1,262 @@
+/* ── Full-page shell (Langfuse-style) ── */
+
+html, body {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.landing {
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Ambient grid + glow */
+.landing::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(30, 48, 80, 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 48, 80, 0.35) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 100% 80% at 50% -10%, #000 20%, transparent 72%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 80% at 50% -10%, #000 20%, transparent 72%);
+}
+
+.landing::after {
+  content: '';
+  position: fixed;
+  top: -30vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1400px, 120vw);
+  height: 70vh;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 45% at 30% 40%, rgba(8, 145, 178, 0.18), transparent 70%),
+    radial-gradient(ellipse 45% 40% at 72% 35%, rgba(34, 211, 238, 0.08), transparent 65%);
+}
+
+.landing > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Nav: edge-to-edge bar, centered content ── */
+.landing-nav {
+  width: 100%;
+  padding: 0 clamp(20px, 4vw, 48px);
+  border-bottom: 1px solid rgba(30, 48, 80, 0.8);
+  background: rgba(7, 13, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.landing-nav-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+}
+
+/* ── Hero: fill viewport ── */
+.landing-hero {
+  width: 100%;
+  max-width: none;
+  min-height: calc(100svh - 58px);
+  margin: 0;
+  padding: clamp(40px, 6vh, 72px) clamp(20px, 4vw, 48px) clamp(48px, 8vh, 80px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.landing-hero h1 {
+  max-width: 920px;
+  font-size: clamp(32px, 5.5vw, 56px);
+  line-height: 1.08;
+}
+
+.landing-hero-lead {
+  max-width: 720px;
+  font-size: clamp(16px, 2.2vw, 20px);
+}
+
+.landing-hero-logo {
+  width: min(100%, 320px);
+}
+
+.landing-hero .hero-viz-wrap,
+.landing-hero .landing-stats {
+  width: 100%;
+  max-width: min(1280px, 100%);
+}
+
+/* ── Sections: full-bleed bands ── */
+.landing-section {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(56px, 8vw, 96px) clamp(20px, 4vw, 48px);
+}
+
+.landing-section > * {
+  max-width: 1320px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.landing-section.alt {
+  background: linear-gradient(
+    180deg,
+    rgba(13, 22, 39, 0) 0%,
+    rgba(13, 22, 39, 0.85) 18%,
+    rgba(13, 22, 39, 0.85) 82%,
+    rgba(13, 22, 39, 0) 100%
+  );
+  border-top: 1px solid rgba(30, 48, 80, 0.5);
+  border-bottom: 1px solid rgba(30, 48, 80, 0.5);
+}
+
+.landing-section-hdr {
+  margin-bottom: clamp(28px, 4vw, 40px);
+}
+
+.landing-section-hdr h2 {
+  font-size: clamp(26px, 3.5vw, 38px);
+}
+
+.landing-section-hdr p {
+  max-width: 780px;
+  font-size: clamp(15px, 1.8vw, 17px);
+}
+
+/* Stats row spans wider */
+.landing-stats {
+  max-width: 1100px;
+  width: 100%;
+  gap: clamp(10px, 2vw, 16px);
+}
+
+.landing-stat {
+  padding: clamp(16px, 2.5vw, 24px) clamp(14px, 2vw, 20px);
+}
+
+.landing-stat-val {
+  font-size: clamp(24px, 4vw, 36px);
+}
+
+/* ── Footer: full width ── */
+.landing-footer {
+  width: 100%;
+  padding: clamp(48px, 8vw, 80px) clamp(20px, 4vw, 48px) clamp(56px, 8vw, 96px);
+  background: linear-gradient(180deg, transparent, rgba(7, 13, 26, 0.6));
+  border-top: 1px solid var(--b0);
+}
+
+.landing-footer > p {
+  max-width: 640px;
+}
+
+/* ── Docs page ── */
+.docs-page-banner {
+  width: 100%;
+  padding: clamp(48px, 8vw, 72px) clamp(20px, 4vw, 48px) clamp(32px, 5vw, 48px);
+  text-align: center;
+  border-bottom: 1px solid rgba(30, 48, 80, 0.6);
+  background: linear-gradient(180deg, rgba(8, 145, 178, 0.06), transparent);
+}
+
+.docs-page-banner h1 {
+  font-size: clamp(30px, 5vw, 48px);
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+}
+
+.docs-page-banner p {
+  color: var(--muL);
+  font-size: clamp(15px, 2vw, 18px);
+  line-height: 1.65;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.docs-layout {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 48px);
+  padding: clamp(32px, 5vw, 48px) clamp(20px, 4vw, 48px) clamp(64px, 8vw, 96px);
+  min-height: calc(100svh - 58px);
+}
+
+.docs-main {
+  max-width: none;
+}
+
+.docs-hero {
+  display: none;
+}
+
+.doc-section h2 {
+  font-size: clamp(20px, 2.5vw, 26px);
+}
+
+@media (max-width: 900px) {
+  .landing-hero {
+    min-height: auto;
+    padding-top: 48px;
+    padding-bottom: 56px;
+  }
+
+  .docs-layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .docs-main {
+    max-width: none;
+  }
+}
+
+/* Grids use full section width */
+.how-grid,
+.phil-viz-row,
+.signal-demo,
+.landing-philosophy,
+.landing-gap-grid,
+.landing-examples,
+.landing-table-wrap,
+.landing-why-grid,
+.landing-deploy {
+  width: 100%;
+}
+
+.how-step,
+.landing-deploy-card,
+.landing-why-card {
+  padding: clamp(18px, 2.5vw, 28px);
+}
+
+.landing-table { font-size: clamp(12px, 1.2vw, 14px); }
+.landing-table th, .landing-table td { padding: clamp(10px, 1.5vw, 14px) clamp(12px, 2vw, 18px); }
+
+@media (min-width: 1400px) {
+  .landing-stats { max-width: 1200px; }
+  .hero-viz-wrap { max-width: 1280px; }
+}
+
+.docs-page-banner {
+  scroll-margin-top: 72px;
+}

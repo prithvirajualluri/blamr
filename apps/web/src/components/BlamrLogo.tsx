@@ -9,12 +9,12 @@ interface BlamrLogoProps {
 
 export function BlamrLogo({ variant = 'full', className = '' }: BlamrLogoProps) {
   const src =
-    variant === 'icon' ? '/blamr_favicon.svg' : '/blamr_logo.svg';
+    variant === 'icon' ? '/blamr_icon.svg' : '/blamr_logo.svg';
   const alt = 'blamr';
   const size =
     variant === 'icon'
-      ? { width: 28, height: 28 }
-      : { width: 168, height: 38 };
+      ? { width: 32, height: 20 }
+      : { width: 182, height: 40 };
 
   return (
     <img

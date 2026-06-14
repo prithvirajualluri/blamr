@@ -8,6 +8,12 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/blamr_icon.svg",
+      "sizes": "52x32",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "theme_color": "#070D1A",
