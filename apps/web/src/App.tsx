@@ -10,9 +10,11 @@ import { ConnectView } from './views/ConnectView';
 import { SettingsView } from './views/SettingsView';
 import { UsersView } from './views/UsersView';
 import { LoginView, RegisterTenantView, AcceptInviteView } from './views/auth/AuthViews';
+import { LandingView } from './views/LandingView';
 import { useRuns, useRunDetail } from './hooks/useRuns';
-import { useAuth } from './auth/AuthContext';
+import { AuthProvider, useAuth } from './auth/AuthContext';
 import { hasApiCredentials } from './api/client';
+import { navigateTo, useIsOperatorApp } from './routing';
 import type { View, RunFilter, DetailSource } from './types';
 
 function AuthenticatedApp() {
@@ -180,8 +182,9 @@ function AuthenticatedApp() {
   );
 }
 
-export function App() {
-  const { user, loading: authLoading, authScreen, inviteToken } = useAuth();
+/** Self-hosted operator UI — only mounted at /app */
+function OperatorApp() {
+  const { user, loading: authLoading, authScreen, inviteToken, setAuthScreen } = useAuth();
   const authenticated = Boolean(user) || hasApiCredentials();
 
   if (authLoading) {
@@ -189,10 +192,28 @@ export function App() {
   }
 
   if (!authenticated) {
-    if (authScreen === 'register-tenant') return <RegisterTenantView />;
+    if (authScreen === 'register-tenant') {
+      return (
+        <RegisterTenantView onBack={() => { navigateTo('/'); setAuthScreen('login'); }} />
+      );
+    }
     if (authScreen === 'accept-invite' || inviteToken) return <AcceptInviteView />;
-    return <LoginView />;
+    return <LoginView onBack={() => navigateTo('/')} />;
   }
 
   return <AuthenticatedApp />;
+}
+
+export function App() {
+  const isOperatorApp = useIsOperatorApp();
+
+  if (!isOperatorApp) {
+    return <LandingView />;
+  }
+
+  return (
+    <AuthProvider>
+      <OperatorApp />
+    </AuthProvider>
+  );
 }

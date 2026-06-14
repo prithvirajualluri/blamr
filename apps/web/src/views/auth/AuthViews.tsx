@@ -3,10 +3,25 @@ import { useAuth } from '../../auth/AuthContext';
 import { fetchInvitePreview } from '../../api/auth';
 import { BlamrLogo } from '../../components/BlamrLogo';
 
-function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function AuthShell({
+  title,
+  subtitle,
+  children,
+  onBack,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  onBack?: () => void;
+}) {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        {onBack && (
+          <button type="button" className="auth-back" onClick={onBack}>
+            ← Back
+          </button>
+        )}
         <BlamrLogo variant="full" className="auth-logo" />
         <h1 className="auth-title">{title}</h1>
         {subtitle && <p className="auth-subtitle">{subtitle}</p>}
@@ -25,7 +40,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function LoginView() {
+export function LoginView({ onBack }: { onBack?: () => void }) {
   const { login, setAuthScreen } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,7 +61,7 @@ export function LoginView() {
   };
 
   return (
-    <AuthShell title="Sign in" subtitle="Access your workspace">
+    <AuthShell title="Sign in" subtitle="Access your workspace" onBack={onBack}>
       <form onSubmit={submit} className="auth-form">
         <Field label="Email">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
@@ -69,7 +84,7 @@ export function LoginView() {
   );
 }
 
-export function RegisterTenantView() {
+export function RegisterTenantView({ onBack }: { onBack?: () => void }) {
   const { registerTenant, setAuthScreen } = useAuth();
   const [workspaceName, setWorkspaceName] = useState('');
   const [name, setName] = useState('');
@@ -92,7 +107,7 @@ export function RegisterTenantView() {
   };
 
   return (
-    <AuthShell title="Register workspace" subtitle="Create your tenant and admin account">
+    <AuthShell title="Register workspace" subtitle="Create your tenant and admin account" onBack={onBack}>
       <form onSubmit={submit} className="auth-form">
         <Field label="Workspace name">
           <input value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} required />
