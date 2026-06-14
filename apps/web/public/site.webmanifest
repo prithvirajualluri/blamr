@@ -1,0 +1,16 @@
+{
+  "name": "blamr",
+  "short_name": "blamr",
+  "description": "Causal intelligence for multi-agent AI",
+  "icons": [
+    {
+      "src": "/blamr_favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "theme_color": "#070D1A",
+  "background_color": "#070D1A",
+  "display": "standalone"
+}
