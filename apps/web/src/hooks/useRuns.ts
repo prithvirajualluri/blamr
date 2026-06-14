@@ -47,6 +47,7 @@ export function usePaginatedRuns(
   params: {
     status?: string;
     workflow_id?: string;
+    agent_id?: string;
     q?: string;
     limit?: number;
     offset?: number;
@@ -81,7 +82,7 @@ export function usePaginatedRuns(
     } finally {
       setLoading(false);
     }
-  }, [enabled, params.status, params.workflow_id, params.q, params.limit, params.offset]);
+  }, [enabled, params.status, params.workflow_id, params.agent_id, params.q, params.limit, params.offset]);
 
   useEffect(() => {
     reload();
@@ -136,6 +137,7 @@ export function useAgentsList(
 ) {
   const [agents, setAgents] = useState<AgentApiRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [uniqueAgents, setUniqueAgents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,6 +145,7 @@ export function useAgentsList(
     if (!enabled) {
       setAgents([]);
       setTotal(0);
+      setUniqueAgents(0);
       setLoading(false);
       return;
     }
@@ -152,9 +155,11 @@ export function useAgentsList(
       const data = await fetchAgentsApi(params);
       setAgents(data.agents);
       setTotal(data.total);
+      setUniqueAgents(data.unique_agents ?? data.agents.length);
     } catch (e) {
       setAgents([]);
       setTotal(0);
+      setUniqueAgents(0);
       setError(e instanceof ApiError ? e.message : 'Failed to load agents');
     } finally {
       setLoading(false);
@@ -165,7 +170,7 @@ export function useAgentsList(
     reload();
   }, [reload, refreshKey]);
 
-  return { agents, total, loading, error, reload };
+  return { agents, total, uniqueAgents, loading, error, reload };
 }
 
 export function useRunDetail(runId: string | null, enabled = true) {

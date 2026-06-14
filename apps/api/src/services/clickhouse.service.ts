@@ -70,4 +70,62 @@ export class ClickHouseService implements OnModuleInit {
     }
     return map;
   }
+
+  /** Per-agent hop stats aggregated from causal edges (workspace-wide). */
+  async getAgentHopAggregates(workspaceId: string): Promise<{
+    agents: Map<string, { hop_index: number; avg_confidence_out: number; hop_runs: number }>;
+    hopTotals: Map<string, number>;
+  }> {
+    const agents = new Map<string, { hop_index: number; avg_confidence_out: number; hop_runs: number }>();
+    const hopTotals = new Map<string, number>();
+
+    try {
+      const agentResult = await this.client.query({
+        query: `
+          SELECT
+            workflow_id,
+            from_agent AS agent_id,
+            min(hop_index) AS hop_index,
+            avg(confidence_out) AS avg_confidence_out,
+            count(DISTINCT run_id) AS hop_runs
+          FROM causal_edges
+          WHERE workspace_id = {ws:String}
+          GROUP BY workflow_id, from_agent`,
+        query_params: { ws: workspaceId },
+        format: 'JSONEachRow',
+      });
+      const agentRows = await agentResult.json<{
+        workflow_id: string;
+        agent_id: string;
+        hop_index: number;
+        avg_confidence_out: number;
+        hop_runs: number;
+      }>();
+      for (const row of agentRows) {
+        agents.set(`${row.workflow_id}:${row.agent_id}`, {
+          hop_index: Number(row.hop_index),
+          avg_confidence_out: Number(row.avg_confidence_out),
+          hop_runs: Number(row.hop_runs),
+        });
+      }
+
+      const totalResult = await this.client.query({
+        query: `
+          SELECT workflow_id, max(hop_index) + 1 AS hop_total
+          FROM causal_edges
+          WHERE workspace_id = {ws:String}
+          GROUP BY workflow_id`,
+        query_params: { ws: workspaceId },
+        format: 'JSONEachRow',
+      });
+      const totalRows = await totalResult.json<{ workflow_id: string; hop_total: number }>();
+      for (const row of totalRows) {
+        hopTotals.set(row.workflow_id, Number(row.hop_total));
+      }
+    } catch {
+      /* ClickHouse unavailable — postgres fallbacks used in AgentsService */
+    }
+
+    return { agents, hopTotals };
+  }
 }

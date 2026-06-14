@@ -274,6 +274,6 @@ export type View = 'monitor' | 'workflows' | 'agents' | 'list' | 'detail' | 'con
 export type RunFilter = 'all' | 'failed' | 'success';
 export type HeatmapFilter = 'all' | 'critical' | 'warning' | 'fair' | 'healthy';
 export type HeatmapSort = 'acc' | 'acc-d' | 'runs' | 'recent';
-export type DetailSource = 'list' | 'monitor';
+export type DetailSource = 'list' | 'monitor' | 'agents';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';

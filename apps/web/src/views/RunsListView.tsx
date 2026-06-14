@@ -25,11 +25,13 @@ interface RunsListViewProps {
   filter: RunFilter;
   search: string;
   workflowFilter?: string;
+  agentFilter?: string;
   page: number;
   onPageChange: (p: number) => void;
   onRunSelect: (id: string) => void;
   onFilterChange: (f: RunFilter) => void;
   onClearWorkflowFilter?: () => void;
+  onViewAllAgents?: () => void;
 }
 
 export function RunsListView({
@@ -41,11 +43,13 @@ export function RunsListView({
   filter,
   search,
   workflowFilter,
+  agentFilter,
   page,
   onPageChange,
   onRunSelect,
   onFilterChange,
   onClearWorkflowFilter,
+  onViewAllAgents,
 }: RunsListViewProps) {
   const useVirtual = totalRuns > RUNS_PAGE_SIZE;
 
@@ -70,9 +74,21 @@ export function RunsListView({
 
       <ApiBanner error={error} />
 
-      {workflowFilter && (
+      {(workflowFilter || agentFilter) && (
         <div className="filter-banner">
-          <span>Workflow: <strong className="mono">{workflowFilter}</strong></span>
+          {agentFilter && (
+            <span>
+              Agent: <strong className="mono">{agentFilter}</strong>
+              {onViewAllAgents && (
+                <button type="button" className="btn btn-sm" style={{ marginLeft: 8 }} onClick={onViewAllAgents}>← Agents</button>
+              )}
+            </span>
+          )}
+          {workflowFilter && (
+            <span>
+              Workflow: <strong className="mono">{workflowFilter}</strong>
+            </span>
+          )}
           <button type="button" className="btn btn-sm" onClick={onClearWorkflowFilter}>Clear</button>
         </div>
       )}

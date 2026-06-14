@@ -59,7 +59,7 @@ export async function runVendorProcurement(opts: VendorProcurementOptions): Prom
     // ── Hop 0: intake ─────────────────────────────────────────────
     const intakeLlm = await complete(
       `You parse enterprise SaaS procurement requests. Reply JSON only:
-{"vendor_id":"slug","vendor_name":"string","category":"analytics|security|other","budget_usd":number,"requires_soc2":boolean,"requires_eu_data":boolean,"business_priority":"low|medium|high","confidence":0.0-1.0}`,
+{"vendor_id":"slug","vendor_name":"string","category":"analytics|security|other","budget_usd":50000,"requires_soc2":true,"requires_eu_data":false,"business_priority":"medium","confidence":0.85}`,
       opts.request,
     );
     const intake = parseJsonBlock(intakeLlm.text) as unknown as IntakePlan & { confidence?: number };
@@ -124,7 +124,7 @@ export async function runVendorProcurement(opts: VendorProcurementOptions): Prom
 
     const legalLlm = await complete(
       `You are a legal reviewer for SaaS contracts. Reply JSON only:
-{"data_processing_ok":boolean,"contract_term_ok":boolean,"risk_notes":"one sentence","confidence":0.0-1.0}`,
+{"data_processing_ok":true,"contract_term_ok":true,"risk_notes":"one sentence","confidence":0.85}`,
       `Vendor: ${vendor.name}\nMin contract months: ${vendor.contract_min_months}\nEU data required: ${requiresEu}\nRegions offered: ${vendor.data_regions.join(', ')}`,
       { temperature: 0.1 },
     );
@@ -281,7 +281,7 @@ Legal: ${JSON.stringify(legal)}`;
     const decisionUser = `Brief:\n${synthLlm.text}\n\nCompliance: ${JSON.stringify(compliance)}\nBudget: $${budget}/mo`;
     const decisionLlm = await complete(
       `Write a final procurement decision JSON only:
-{"decision":"approve|approve_with_conditions|reject","conditions":["..."],"summary":"2 sentences","confidence":0.0-1.0}`,
+{"decision":"approve|approve_with_conditions|reject","conditions":["..."],"summary":"2 sentences","confidence":0.85}`,
       decisionUser,
     );
     const decision = parseJsonBlock(decisionLlm.text);

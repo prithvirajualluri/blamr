@@ -38,7 +38,7 @@ export async function runCustomerSupport(opts: CustomerSupportOptions): Promise<
   try {
     const intentLlm = await complete(
       `You classify employee HR support queries. Reply with JSON only:
-{"category":"leave|payroll|benefits|other","label":"short label","confidence":0.0-1.0,"reasoning":"one sentence"}`,
+{"category":"leave|payroll|benefits|other","label":"short label","confidence":0.85,"reasoning":"one sentence"}`,
       opts.userQuery,
     );
     const intent = parseJsonBlock(intentLlm.text);

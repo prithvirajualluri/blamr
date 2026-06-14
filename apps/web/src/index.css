@@ -782,6 +782,11 @@ body:has(.blamr-shell-app) {
 .table-muted { color: var(--mu); font-size: 11px; }
 .table-actions { text-align: right; white-space: nowrap; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.agent-role-badge {
+  display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px;
+  background: var(--viD); color: var(--viL); border: 1px solid rgba(124, 58, 237, 0.25);
+}
 .tag-chip {
   font-size: 10px; padding: 2px 8px; border-radius: 999px;
   background: var(--bg3); border: 1px solid var(--b0); color: var(--muL);

@@ -36,7 +36,7 @@ export async function runIncidentTriage(opts: IncidentOptions): Promise<Workflow
   try {
     const classifyLlm = await complete(
       `You classify production alerts. Reply JSON only:
-{"category":"outage|latency|error_spike|security|other","service":"service name","confidence":0.0-1.0,"reasoning":"one sentence"}`,
+{"category":"outage|latency|error_spike|security|other","service":"service name","confidence":0.85,"reasoning":"one sentence"}`,
       opts.alertText,
     );
     const classification = parseJsonBlock(classifyLlm.text);
@@ -74,7 +74,7 @@ export async function runIncidentTriage(opts: IncidentOptions): Promise<Workflow
     const impactUser = `Alert: ${opts.alertText}\nClassification: ${category} / ${classification.service ?? 'unknown'}`;
     const impactLlm = await complete(
       `Assess incident severity for on-call. Reply JSON only:
-{"severity":"P1|P2|P3","user_impact":"brief","blast_radius":"brief","confidence":0.0-1.0,"reasoning":"one sentence"}`,
+{"severity":"P1|P2|P3","user_impact":"brief","blast_radius":"brief","confidence":0.85,"reasoning":"one sentence"}`,
       impactUser,
     );
     const impact = parseJsonBlock(impactLlm.text);

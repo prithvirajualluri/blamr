@@ -123,9 +123,17 @@ function stripJsonFence(text: string): string {
     .trim();
 }
 
-/** Repair common LLM JSON mistakes (unquoted keys, trailing commas). */
+/** Repair common LLM JSON mistakes (unquoted keys, trailing commas, schema placeholders). */
 function repairJson(text: string): string {
   let s = stripJsonFence(text);
+  // Prompt placeholders copied literally (e.g. "confidence":0.0-1.0)
+  s = s.replace(/:\s*0\.0\s*-\s*1\.0/g, ':0.85');
+  s = s.replace(/:\s*boolean/g, ':true');
+  s = s.replace(/:\s*number/g, ':0');
+  s = s.replace(/:\s*True\b/g, ':true');
+  s = s.replace(/:\s*False\b/g, ':false');
+  s = s.replace(/:\s*None\b/g, ':null');
+  s = s.replace(/:\s*undefined\b/g, ':null');
   // Half-quoted keys: ,confidence": → ,"confidence":
   s = s.replace(/([\{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)":/g, '$1"$2":');
   // Unquoted keys: ,confidence: → ,"confidence":
@@ -134,14 +142,46 @@ function repairJson(text: string): string {
   return s;
 }
 
+function tryParseJson(raw: string): Record<string, unknown> | null {
+  for (const candidate of [raw, repairJson(raw)]) {
+    try {
+      return JSON.parse(candidate) as Record<string, unknown>;
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
+/** Last-resort: pull common planner/classifier fields when JSON is still invalid. */
+function fallbackObjectFromText(text: string): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  const sub = text.match(/sub_queries"\s*:\s*\[([\s\S]*?)\]/i);
+  if (sub) {
+    const items = [...sub[1].matchAll(/"((?:\\.|[^"\\])*)"/g)].map((m) =>
+      m[1].replace(/\\"/g, '"'),
+    );
+    if (items.length) out.sub_queries = items;
+  }
+  const focus = text.match(/focus"\s*:\s*"((?:\\.|[^"\\])*)"/i);
+  if (focus) out.focus = focus[1].replace(/\\"/g, '"');
+  const conf = text.match(/confidence"\s*:\s*([0-9.]+)/i);
+  if (conf) out.confidence = Number(conf[1]);
+  const cat = text.match(/category"\s*:\s*"((?:\\.|[^"\\])*)"/i);
+  if (cat) out.category = cat[1];
+  return Object.keys(out).length ? out : null;
+}
+
 export function parseJsonBlock(text: string): Record<string, unknown> {
   const match = stripJsonFence(text).match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`Expected JSON in model output: ${text.slice(0, 120)}`);
 
   const raw = match[0];
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return JSON.parse(repairJson(raw)) as Record<string, unknown>;
-  }
+  const parsed = tryParseJson(raw);
+  if (parsed) return parsed;
+
+  const fallback = fallbackObjectFromText(raw);
+  if (fallback) return fallback;
+
+  throw new Error(`Invalid JSON in model output: ${text.slice(0, 200)}`);
 }

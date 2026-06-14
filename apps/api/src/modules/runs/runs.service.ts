@@ -16,7 +16,7 @@ export class RunsService {
     private readonly clickhouse: ClickHouseService,
   ) {}
 
-  private async statusCounts(workspaceId: string, workflowId?: string) {
+  private async statusCounts(workspaceId: string, workflowId?: string, agentId?: string) {
     const qb = this.runRepo
       .createQueryBuilder('r')
       .select(`SUM(CASE WHEN r.status = 'success' THEN 1 ELSE 0 END)`, 'success')
@@ -24,6 +24,7 @@ export class RunsService {
       .addSelect(`SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END)`, 'running')
       .where('r.workspace_id = :workspaceId', { workspaceId });
     if (workflowId) qb.andWhere('r.workflow_id = :workflowId', { workflowId });
+    if (agentId) qb.andWhere(`r.agents @> :agentArr::jsonb`, { agentArr: JSON.stringify([agentId]) });
     const row = await qb.getRawOne<Record<string, string>>();
     return {
       success: Number(row?.success ?? 0),
@@ -36,24 +37,31 @@ export class RunsService {
     workspace_id: string;
     status?: string;
     workflow_id?: string;
+    agent_id?: string;
     q?: string;
     limit?: number;
     offset?: number;
   }) {
     const limit = Math.min(params.limit || 50, 200);
     const offset = params.offset || 0;
+    const useQueryBuilder = Boolean(params.q?.trim() || params.agent_id);
 
-    if (params.q?.trim()) {
-      const q = `%${params.q.trim()}%`;
+    if (useQueryBuilder) {
       const qb = this.runRepo
         .createQueryBuilder('r')
-        .where('r.workspace_id = :workspaceId', { workspaceId: params.workspace_id })
-        .andWhere(
+        .where('r.workspace_id = :workspaceId', { workspaceId: params.workspace_id });
+      if (params.q?.trim()) {
+        const q = `%${params.q.trim()}%`;
+        qb.andWhere(
           '(r.id ILIKE :q OR r.workflow_id ILIKE :q OR r.title ILIKE :q OR r.error_summary ILIKE :q)',
           { q },
         );
+      }
       if (params.status) qb.andWhere('r.status = :status', { status: params.status });
       if (params.workflow_id) qb.andWhere('r.workflow_id = :workflowId', { workflowId: params.workflow_id });
+      if (params.agent_id) {
+        qb.andWhere(`r.agents @> :agentArr::jsonb`, { agentArr: JSON.stringify([params.agent_id]) });
+      }
 
       const [runs, total] = await qb
         .orderBy('r.started_at', 'DESC')
@@ -61,7 +69,7 @@ export class RunsService {
         .skip(offset)
         .getManyAndCount();
 
-      const counts = await this.statusCounts(params.workspace_id, params.workflow_id);
+      const counts = await this.statusCounts(params.workspace_id, params.workflow_id, params.agent_id);
       return { runs, total, counts };
     }
 
@@ -78,7 +86,7 @@ export class RunsService {
       skip: offset,
     });
 
-    const counts = await this.statusCounts(params.workspace_id, params.workflow_id);
+    const counts = await this.statusCounts(params.workspace_id, params.workflow_id, params.agent_id);
     return { runs, total, counts };
   }
 

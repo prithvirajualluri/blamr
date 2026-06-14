@@ -109,7 +109,10 @@ export function breadcrumbsForView(
     case 'detail':
       return [
         { label: 'Overview', onClick: handlers?.goMonitor },
-        { label: detailSource === 'monitor' ? 'Overview' : 'Executions', onClick: detailSource === 'monitor' ? handlers?.goMonitor : handlers?.goList },
+        {
+          label: detailSource === 'monitor' ? 'Overview' : detailSource === 'agents' ? 'Agents' : 'Executions',
+          onClick: detailSource === 'monitor' ? handlers?.goMonitor : detailSource === 'agents' ? handlers?.goAgents : handlers?.goList,
+        },
         { label: runTitle ?? 'Run detail' },
       ];
     case 'connect':

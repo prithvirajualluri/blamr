@@ -34,6 +34,7 @@ import {
   runFilterFromHash,
 } from './app-routing';
 import { exportRunNdjson } from './api/runs';
+import type { AgentApiRow } from './api/runs';
 import { RUNS_PAGE_SIZE } from './utils/registry';
 import type { View, RunFilter, DetailSource } from './types';
 
@@ -43,7 +44,8 @@ function AuthenticatedApp() {
   const [view, setViewState] = useState<View>(initialRoute.view);
   const [runFilter, setRunFilter] = useState<RunFilter>(() => runFilterFromHash());
   const [search, setSearch] = useState('');
-  const [workflowFilter, setWorkflowFilter] = useState<string | undefined>();
+  const [workflowFilter, setWorkflowFilter] = useState<string | undefined>(initialRoute.scopeWorkflowId);
+  const [agentFilter, setAgentFilter] = useState<string | undefined>(initialRoute.scopeAgentId);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRoute.runId ?? null);
   const [detailSource, setDetailSource] = useState<DetailSource>('list');
   const [detailTab, setDetailTab] = useState<DetailTab>('graph');
@@ -72,7 +74,7 @@ function AuthenticatedApp() {
     refreshKey,
     view === 'workflows',
   );
-  const { agents, total: agentsTotal, loading: agentsLoading, error: agentsError } = useAgentsList(
+  const { agents, total: agentsTotal, uniqueAgents: agentsUnique, loading: agentsLoading, error: agentsError } = useAgentsList(
     { limit: 40, offset: (agentPage - 1) * 40, q: view === 'agents' ? search : undefined },
     refreshKey,
     view === 'agents',
@@ -82,6 +84,7 @@ function AuthenticatedApp() {
     {
       status: execStatus,
       workflow_id: workflowFilter,
+      agent_id: agentFilter,
       q: view === 'list' ? search : undefined,
       limit: RUNS_PAGE_SIZE,
       offset: (execPage - 1) * RUNS_PAGE_SIZE,
@@ -104,18 +107,34 @@ function AuthenticatedApp() {
     return () => setUnauthorizedHandler(null);
   }, [logout, addToast]);
 
-  const pushRoute = useCallback((nextView: View, runId?: string | null, filter?: RunFilter) => {
+  const pushRoute = useCallback((
+    nextView: View,
+    runId?: string | null,
+    filter?: RunFilter,
+    scope?: { workflowId?: string; agentId?: string },
+  ) => {
     const hash = hashForRoute(
-      { view: nextView, runId: runId ?? undefined },
+      {
+        view: nextView,
+        runId: runId ?? undefined,
+        scopeWorkflowId: scope?.workflowId,
+        scopeAgentId: scope?.agentId,
+      },
       filter ?? runFilter,
     );
     window.history.pushState(null, '', hash);
   }, [runFilter]);
 
-  const setView = useCallback((v: View, opts?: { runId?: string | null; filter?: RunFilter; source?: DetailSource }) => {
+  const setView = useCallback((v: View, opts?: {
+    runId?: string | null;
+    filter?: RunFilter;
+    source?: DetailSource;
+    scope?: { workflowId?: string; agentId?: string };
+  }) => {
     setViewState(v);
     if (v !== 'list' && v !== 'detail') {
       setWorkflowFilter(undefined);
+      setAgentFilter(undefined);
     }
     if (opts?.filter) setRunFilter(opts.filter);
     if (v === 'detail' && opts?.runId) {
@@ -125,7 +144,14 @@ function AuthenticatedApp() {
       setActiveNav(navIdForView('list', opts.filter ?? runFilter));
     } else if (v !== 'detail') {
       setSelectedRunId(null);
-      pushRoute(v, null, opts?.filter ?? runFilter);
+      if (v === 'list' && opts?.scope) {
+        if ('workflowId' in opts.scope) setWorkflowFilter(opts.scope.workflowId);
+        if ('agentId' in opts.scope) setAgentFilter(opts.scope.agentId);
+      }
+      const scope = v === 'list'
+        ? { workflowId: opts?.scope?.workflowId, agentId: opts?.scope?.agentId }
+        : undefined;
+      pushRoute(v, null, opts?.filter ?? runFilter, scope);
       setActiveNav(navIdForView(v, opts?.filter ?? runFilter));
     }
   }, [pushRoute, runFilter]);
@@ -142,7 +168,13 @@ function AuthenticatedApp() {
       setViewState(route.view);
       setSelectedRunId(null);
       setActiveNav(navIdForView(route.view, filter));
-      if (route.view !== 'list') setWorkflowFilter(undefined);
+      if (route.view === 'list') {
+        setWorkflowFilter(route.scopeWorkflowId);
+        setAgentFilter(route.scopeAgentId);
+      } else {
+        setWorkflowFilter(undefined);
+        setAgentFilter(undefined);
+      }
     }
   }, []);
 
@@ -179,9 +211,11 @@ function AuthenticatedApp() {
   const goMonitor = useCallback(() => setView('monitor'), [setView]);
   const goWorkflows = useCallback(() => { setWfPage(1); setView('workflows'); }, [setView]);
   const goAgents = useCallback(() => { setAgentPage(1); setView('agents'); }, [setView]);
-  const goList = useCallback((filter?: RunFilter) => {
+  const goList = useCallback((filter?: RunFilter, scope?: { workflowId?: string; agentId?: string }) => {
     setExecPage(1);
-    setView('list', { filter: filter ?? 'all' });
+    if (scope?.workflowId !== undefined) setWorkflowFilter(scope.workflowId);
+    if (scope?.agentId !== undefined) setAgentFilter(scope.agentId);
+    setView('list', { filter: filter ?? 'all', scope });
   }, [setView]);
   const goConnect = useCallback(() => setView('connect'), [setView]);
   const goSettings = useCallback(() => setView('settings'), [setView]);
@@ -216,8 +250,9 @@ function AuthenticatedApp() {
   const handleBack = useCallback(() => {
     setSelectedRunId(null);
     if (detailSource === 'monitor') goMonitor();
-    else goList(runFilter);
-  }, [detailSource, goMonitor, goList, runFilter]);
+    else if (detailSource === 'agents') goAgents();
+    else goList(runFilter, { workflowId: workflowFilter, agentId: agentFilter });
+  }, [detailSource, goMonitor, goAgents, goList, runFilter, workflowFilter, agentFilter]);
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -231,19 +266,44 @@ function AuthenticatedApp() {
 
   const handleWorkflowSelect = useCallback((wf: string) => {
     setWorkflowFilter(wf);
+    setAgentFilter(undefined);
     setSearch('');
     setExecPage(1);
-    goList('all');
+    goList('all', { workflowId: wf, agentId: undefined });
+  }, [goList]);
+
+  const handleAgentSelect = useCallback((agent: AgentApiRow) => {
+    setWorkflowFilter(agent.workflow_id);
+    setAgentFilter(agent.id);
+    setSearch('');
+    setExecPage(1);
+    if (agent.latest_run_id) {
+      setDetailSource('agents');
+      setDetailTab('trace');
+      setView('detail', { runId: agent.latest_run_id, source: 'agents' });
+      return;
+    }
+    goList('all', { workflowId: agent.workflow_id, agentId: agent.id });
+  }, [goList, setView]);
+
+  const handleAgentViewAllRuns = useCallback((agent: AgentApiRow) => {
+    setWorkflowFilter(agent.workflow_id);
+    setAgentFilter(agent.id);
+    setSearch('');
+    setExecPage(1);
+    goList('all', { workflowId: agent.workflow_id, agentId: agent.id });
   }, [goList]);
 
   const handleClearWorkflowFilter = useCallback(() => {
     setWorkflowFilter(undefined);
+    setAgentFilter(undefined);
     setExecPage(1);
-  }, []);
+    goList(runFilter, { workflowId: undefined, agentId: undefined });
+  }, [goList, runFilter]);
 
   useEffect(() => {
     setExecPage(1);
-  }, [search, runFilter, workflowFilter]);
+  }, [search, runFilter, workflowFilter, agentFilter]);
 
   useEffect(() => {
     setWfPage(1);
@@ -343,7 +403,7 @@ function AuthenticatedApp() {
           onShowKeyboard={view !== 'detail' ? () => setShowKb(true) : undefined}
           onRefresh={view !== 'detail' ? handleRefresh : undefined}
           onBack={view === 'detail' ? handleBack : undefined}
-          backLabel={detailSource === 'monitor' ? 'Overview' : 'Executions'}
+          backLabel={detailSource === 'monitor' ? 'Overview' : detailSource === 'agents' ? 'Agents' : 'Executions'}
           onCopyId={view === 'detail' ? copyId : undefined}
           onExport={view === 'detail' ? handleExport : undefined}
           detailSource={detailSource}
@@ -390,12 +450,15 @@ function AuthenticatedApp() {
             <AgentsView
               agents={agents}
               total={agentsTotal}
+              uniqueAgents={agentsUnique}
               loading={agentsLoading}
               error={agentsError}
               search={search}
               page={agentPage}
               onSearchChange={setSearch}
               onPageChange={setAgentPage}
+              onAgentSelect={handleAgentSelect}
+              onAgentViewAllRuns={handleAgentViewAllRuns}
               onWorkflowSelect={handleWorkflowSelect}
             />
           )}
@@ -409,11 +472,13 @@ function AuthenticatedApp() {
               filter={runFilter}
               search={search}
               workflowFilter={workflowFilter}
+              agentFilter={agentFilter}
               page={execPage}
               onPageChange={setExecPage}
               onRunSelect={(id) => handleRunSelect(id, 'list')}
-              onFilterChange={(f) => goList(f)}
+              onFilterChange={(f) => goList(f, { workflowId: workflowFilter, agentId: agentFilter })}
               onClearWorkflowFilter={handleClearWorkflowFilter}
+              onViewAllAgents={goAgents}
             />
           )}
           {view === 'detail' && selectedRunId && (

@@ -44,11 +44,22 @@ export interface WorkflowApiRow {
 
 export interface AgentApiRow {
   id: string;
+  workflow_id: string;
   run_count: number;
-  avg_accuracy: number;
+  avg_run_accuracy: number;
+  avg_hop_confidence: number | null;
+  hop_index: number;
+  hop_total: number;
+  hop_role: string;
   last_seen_at: number;
-  workflow_ids: string[];
+  latest_run_id: string | null;
   blamr_status: BlamrConnectionStatus;
+}
+
+export interface AgentsListResponse {
+  agents: AgentApiRow[];
+  total: number;
+  unique_agents: number;
 }
 
 interface ListRunsResponse {
@@ -60,6 +71,7 @@ interface ListRunsResponse {
 export async function fetchRuns(params?: {
   status?: string;
   workflow_id?: string;
+  agent_id?: string;
   q?: string;
   limit?: number;
   offset?: number;
@@ -67,6 +79,7 @@ export async function fetchRuns(params?: {
   const q = new URLSearchParams();
   if (params?.status) q.set('status', params.status);
   if (params?.workflow_id) q.set('workflow_id', params.workflow_id);
+  if (params?.agent_id) q.set('agent_id', params.agent_id);
   if (params?.q) q.set('q', params.q);
   if (params?.limit) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));
@@ -104,7 +117,7 @@ export async function fetchAgentsApi(params?: {
   limit?: number;
   offset?: number;
   q?: string;
-}): Promise<{ agents: AgentApiRow[]; total: number }> {
+}): Promise<AgentsListResponse> {
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit', String(params.limit));
   if (params?.offset !== undefined) q.set('offset', String(params.offset));

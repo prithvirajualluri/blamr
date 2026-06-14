@@ -35,8 +35,8 @@ export async function runResearchAssistant(opts: ResearchOptions): Promise<Workf
 
   try {
     const plannerLlm = await complete(
-      `You decompose research questions into search sub-queries. Reply JSON only:
-{"sub_queries":["q1","q2"],"focus":"one sentence goal","confidence":0.0-1.0}`,
+      `You decompose research questions into search sub-queries. Reply JSON only, no markdown:
+{"sub_queries":["q1","q2"],"focus":"one sentence goal","confidence":0.85}`,
       opts.question,
     );
     const plan = parseJsonBlock(plannerLlm.text);
