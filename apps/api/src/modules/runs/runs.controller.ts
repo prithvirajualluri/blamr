@@ -17,6 +17,7 @@ export class RunsController {
     @Req() req: { workspaceId: string },
     @Query('status') status?: string,
     @Query('workflow_id') workflow_id?: string,
+    @Query('q') q?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
@@ -24,6 +25,7 @@ export class RunsController {
       workspace_id: req.workspaceId,
       status,
       workflow_id,
+      q,
       limit: limit ? parseInt(limit, 10) : 50,
       offset: offset ? parseInt(offset, 10) : 0,
     });

@@ -36,6 +36,9 @@ export function ConnectView() {
 
   return (
     <div className="page-enter">
+      <div style={{ background: 'var(--goD)', border: '1px solid rgba(215,119,6,.28)', borderRadius: 'var(--rad)', padding: '10px 14px', fontSize: 12.5, color: 'var(--goL)', marginBottom: 14, lineHeight: 1.55 }}>
+        <strong>Local ports:</strong> set <code style={{ fontFamily: 'var(--mono)' }}>BLAMR_ENDPOINT</code> to the <strong>ingest</strong> service (<code style={{ fontFamily: 'var(--mono)' }}>http://localhost:3001/v1</code>) for SDK and MCP emitters. The dashboard API runs on port <code style={{ fontFamily: 'var(--mono)' }}>3000</code> — do not point emitters at it.
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         {PATHS.map((p, i) => (
           <button

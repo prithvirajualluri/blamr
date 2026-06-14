@@ -6,6 +6,8 @@ import { KeysModule } from './modules/keys/keys.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { AgentsModule } from './modules/agents/agents.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { BootstrapModule } from './bootstrap/bootstrap.module';
@@ -47,6 +49,8 @@ import { WorkspaceInviteEntity } from './entities/workspace-invite.entity';
     WorkspaceModule,
     WebhooksModule,
     WorkflowsModule,
+    MetricsModule,
+    AgentsModule,
     AuthModule,
     UsersModule,
     AuthGuardsModule,

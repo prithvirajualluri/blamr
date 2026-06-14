@@ -6,8 +6,9 @@ interface KeyboardOverlayProps {
 }
 
 const SHORTCUTS = [
-  { desc: 'Go to Monitor', key: 'G M' },
-  { desc: 'Go to All runs', key: 'G R' },
+  { desc: 'Go to Overview', key: 'G M' },
+  { desc: 'Go to Workflows', key: 'G W' },
+  { desc: 'Go to Executions', key: 'G R' },
   { desc: 'Connect agents', key: 'G C' },
   { desc: 'API & keys', key: 'G K' },
   { desc: 'Search', key: '/' },

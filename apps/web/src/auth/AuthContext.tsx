@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import type { AuthUser, LoginRequest, RegisterTenantRequest, RegisterUserRequest } from '@blamr/types';
 import * as authApi from '../api/auth';
 import { clearStoredToken, getStoredToken, hydrateTokenFromStorage, setStoredToken } from './storage';
+import type { OnboardingTrigger } from './onboarding';
 
 type AuthScreen = 'login' | 'register-tenant' | 'accept-invite';
 
@@ -10,8 +11,10 @@ interface AuthContextValue {
   loading: boolean;
   authScreen: AuthScreen;
   inviteToken: string | null;
+  onboardingTrigger: OnboardingTrigger | null;
   setAuthScreen: (screen: AuthScreen) => void;
   setInviteToken: (token: string | null) => void;
+  clearOnboardingTrigger: () => void;
   login: (body: LoginRequest) => Promise<void>;
   registerTenant: (body: RegisterTenantRequest) => Promise<void>;
   registerUser: (body: RegisterUserRequest) => Promise<void>;
@@ -31,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authScreen, setAuthScreen] = useState<AuthScreen>('login');
   const [inviteToken, setInviteToken] = useState<string | null>(parseInviteFromUrl);
+  const [onboardingTrigger, setOnboardingTrigger] = useState<OnboardingTrigger | null>(null);
 
   const applyAuth = useCallback((token: string, authUser: AuthUser) => {
     setStoredToken(token);
@@ -51,22 +55,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hydrateTokenFromStorage();
     const token = getStoredToken();
     const urlInvite = parseInviteFromUrl();
-    if (urlInvite) {
-      setInviteToken(urlInvite);
-      setAuthScreen('accept-invite');
+
+    const boot = async () => {
+      if (token) {
+        try {
+          await refreshUser();
+          if (urlInvite) {
+            setInviteToken(urlInvite);
+            setAuthScreen('accept-invite');
+          }
+        } catch {
+          clearStoredToken();
+          setUser(null);
+          if (urlInvite) {
+            setInviteToken(urlInvite);
+            setAuthScreen('accept-invite');
+          }
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (urlInvite) {
+        setInviteToken(urlInvite);
+        setAuthScreen('accept-invite');
+      }
       setLoading(false);
-      return;
-    }
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    refreshUser()
-      .catch(() => {
-        clearStoredToken();
-        setUser(null);
-      })
-      .finally(() => setLoading(false));
+    };
+
+    boot();
   }, [refreshUser]);
 
   const login = useCallback(async (body: LoginRequest) => {
@@ -77,19 +95,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerTenant = useCallback(async (body: RegisterTenantRequest) => {
     const res = await authApi.registerTenant(body);
     applyAuth(res.access_token, res.user);
+    setOnboardingTrigger('workspace-created');
   }, [applyAuth]);
 
   const registerUser = useCallback(async (body: RegisterUserRequest) => {
     const res = await authApi.registerUser(body);
     applyAuth(res.access_token, res.user);
+    setOnboardingTrigger('member-joined');
     setInviteToken(null);
     window.history.replaceState({}, '', window.location.pathname);
   }, [applyAuth]);
+
+  const clearOnboardingTrigger = useCallback(() => {
+    setOnboardingTrigger(null);
+  }, []);
 
   const logout = useCallback(() => {
     clearStoredToken();
     setUser(null);
     setAuthScreen('login');
+    setOnboardingTrigger(null);
   }, []);
 
   const value = useMemo(
@@ -98,15 +123,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       authScreen,
       inviteToken,
+      onboardingTrigger,
       setAuthScreen,
       setInviteToken,
+      clearOnboardingTrigger,
       login,
       registerTenant,
       registerUser,
       logout,
       refreshUser,
     }),
-    [user, loading, authScreen, inviteToken, login, registerTenant, registerUser, logout, refreshUser],
+    [user, loading, authScreen, inviteToken, onboardingTrigger, login, registerTenant, registerUser, logout, refreshUser, clearOnboardingTrigger],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

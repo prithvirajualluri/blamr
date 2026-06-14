@@ -16,13 +16,55 @@ export class RunsService {
     private readonly clickhouse: ClickHouseService,
   ) {}
 
+  private async statusCounts(workspaceId: string, workflowId?: string) {
+    const qb = this.runRepo
+      .createQueryBuilder('r')
+      .select(`SUM(CASE WHEN r.status = 'success' THEN 1 ELSE 0 END)`, 'success')
+      .addSelect(`SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END)`, 'failed')
+      .addSelect(`SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END)`, 'running')
+      .where('r.workspace_id = :workspaceId', { workspaceId });
+    if (workflowId) qb.andWhere('r.workflow_id = :workflowId', { workflowId });
+    const row = await qb.getRawOne<Record<string, string>>();
+    return {
+      success: Number(row?.success ?? 0),
+      failed: Number(row?.failed ?? 0),
+      running: Number(row?.running ?? 0),
+    };
+  }
+
   async list(params: {
     workspace_id: string;
     status?: string;
     workflow_id?: string;
+    q?: string;
     limit?: number;
     offset?: number;
   }) {
+    const limit = Math.min(params.limit || 50, 200);
+    const offset = params.offset || 0;
+
+    if (params.q?.trim()) {
+      const q = `%${params.q.trim()}%`;
+      const qb = this.runRepo
+        .createQueryBuilder('r')
+        .where('r.workspace_id = :workspaceId', { workspaceId: params.workspace_id })
+        .andWhere(
+          '(r.id ILIKE :q OR r.workflow_id ILIKE :q OR r.title ILIKE :q OR r.error_summary ILIKE :q)',
+          { q },
+        );
+      if (params.status) qb.andWhere('r.status = :status', { status: params.status });
+      if (params.workflow_id) qb.andWhere('r.workflow_id = :workflowId', { workflowId: params.workflow_id });
+
+      const [runs, total] = await qb
+        .orderBy('r.started_at', 'DESC')
+        .take(limit)
+        .skip(offset)
+        .getManyAndCount();
+
+      const counts = await this.statusCounts(params.workspace_id, params.workflow_id);
+      return { runs, total, counts };
+    }
+
     const where: FindOptionsWhere<WorkflowRunEntity> = {
       workspace_id: params.workspace_id,
     };
@@ -32,11 +74,12 @@ export class RunsService {
     const [runs, total] = await this.runRepo.findAndCount({
       where,
       order: { started_at: 'DESC' },
-      take: params.limit || 50,
-      skip: params.offset || 0,
+      take: limit,
+      skip: offset,
     });
 
-    return { runs, total };
+    const counts = await this.statusCounts(params.workspace_id, params.workflow_id);
+    return { runs, total, counts };
   }
 
   private async requireRun(runId: string, workspaceId: string) {
@@ -60,7 +103,7 @@ export class RunsService {
     return report;
   }
 
-  async getConfidenceTrace(runId: string, workspaceId: string) {
+  async getConfidenceTrace(runId: string, workspaceId: string, inflationThreshold = 0.15) {
     await this.requireRun(runId, workspaceId);
     const edges = await this.clickhouse.getEdgesByRunId(runId);
     return {
@@ -68,7 +111,7 @@ export class RunsService {
         agent: e.from_agent,
         ci: e.confidence_in,
         co: e.confidence_out,
-        inflated: e.confidence_out - e.confidence_in > 0.15,
+        inflated: e.confidence_out - e.confidence_in > inflationThreshold,
       })),
     };
   }

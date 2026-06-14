@@ -86,6 +86,11 @@ export interface WorkflowMonitorRow {
   runAccs: number[];
   avgAcc: number;
   totalRuns: number;
+  failedRuns: number;
+  successRuns: number;
+  totalCostUsd: number;
+  totalTokens: number;
+  avgDurationMs: number;
   realRuns: string[];
   lastSeenAt: number;
   blamrStatus: BlamrConnectionStatus;
@@ -174,7 +179,9 @@ export function buildRunDetail(
   confidence: { hops: ConfidenceHop[] } | null,
   intent: { hops: IntentHop[] } | null,
   workflowProfile?: WorkflowProfile,
+  inflationThreshold?: number,
 ): RunDetail {
+  const threshold = inflationThreshold ?? INFLATION_THRESHOLD;
   const summary = mapApiRun(run);
   const hopMl = new Map(
     (blame?.hop_analysis ?? []).map((h) => [h.hop_index, h]),
@@ -185,7 +192,7 @@ export function buildRunDetail(
     influence: e.influence_score,
     ci: e.confidence_in,
     co: e.confidence_out,
-    inflated: e.confidence_out - e.confidence_in > INFLATION_THRESHOLD,
+    inflated: e.confidence_out - e.confidence_in > threshold,
   }));
 
   return {
@@ -208,7 +215,7 @@ export function buildRunDetail(
       agent: e.from_agent,
       ci: e.confidence_in,
       co: e.confidence_out,
-      inflated: e.confidence_out - e.confidence_in > INFLATION_THRESHOLD,
+      inflated: e.confidence_out - e.confidence_in > threshold,
     })),
     intent_trace: intent?.hops ?? edges.map((e) => ({
       agent: e.from_agent,
@@ -250,6 +257,11 @@ export function groupRunsByWorkflow(runs: RunSummary[]): WorkflowMonitorRow[] {
       runAccs: accs,
       avgAcc: accs.reduce((a, b) => a + b, 0) / (accs.length || 1),
       totalRuns: wfRuns.length,
+      failedRuns: wfRuns.filter((r) => r.status === 'failed').length,
+      successRuns: wfRuns.filter((r) => r.status === 'success').length,
+      totalCostUsd: wfRuns.reduce((s, r) => s + r.total_cost_usd, 0),
+      totalTokens: wfRuns.reduce((s, r) => s + r.total_tokens, 0),
+      avgDurationMs: wfRuns.reduce((s, r) => s + r.total_ms, 0) / (wfRuns.length || 1),
       realRuns: sorted.map((r) => r.id),
       lastSeenAt,
       blamrStatus: computeBlamrStatus(lastSeenAt),
@@ -258,10 +270,10 @@ export function groupRunsByWorkflow(runs: RunSummary[]): WorkflowMonitorRow[] {
   });
 }
 
-export type View = 'monitor' | 'list' | 'detail' | 'connect' | 'settings' | 'users';
+export type View = 'monitor' | 'workflows' | 'agents' | 'list' | 'detail' | 'connect' | 'settings' | 'users';
 export type RunFilter = 'all' | 'failed' | 'success';
-export type HeatmapFilter = 'all' | 'critical' | 'warning' | 'healthy';
-export type HeatmapSort = 'acc' | 'acc-d' | 'blame' | 'runs';
+export type HeatmapFilter = 'all' | 'critical' | 'warning' | 'fair' | 'healthy';
+export type HeatmapSort = 'acc' | 'acc-d' | 'runs' | 'recent';
 export type DetailSource = 'list' | 'monitor';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';

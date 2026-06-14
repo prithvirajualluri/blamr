@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS blamr.causal_edges (
     ingested_at DateTime64(3) DEFAULT now64(3)
 ) ENGINE = MergeTree()
 ORDER BY (workspace_id, run_id, hop_index)
-TTL ingested_at + INTERVAL 30 DAY;
+TTL toDateTime(ingested_at) + INTERVAL 30 DAY;
 
 CREATE TABLE IF NOT EXISTS blamr.run_summaries (
     run_id String,

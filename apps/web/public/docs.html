@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="assets/blamr_favicon.svg" />
+  <meta name="theme-color" content="#070D1A" />
+  <title>Documentation — blamr</title>
+  <meta name="description" content="Install blamr and connect your agents — Docker, SDK, MCP proxy, and environment reference." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="layout.css" />
+  <link rel="stylesheet" href="docs.css" />
+</head>
+<body>
+  <div class="landing">
+    <header class="landing-nav">
+      <div class="landing-nav-inner">
+      <a class="landing-nav-brand" href="/">
+        <img src="/blamr_logo.svg" alt="blamr" width="136" height="30" />
+      </a>
+      <nav class="landing-nav-links">
+        <a href="/">Home</a>
+        <a href="/docs.html" class="active" style="color:var(--cyL)">Install</a>
+        <a href="/causal-monitoring.html">Causal monitoring</a>
+        <a href="/app">Open console</a>
+        <a href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      </div>
+    </header>
+
+    <div class="docs-page-banner" id="overview">
+      <h1>Documentation</h1>
+      <p>Install the blamr platform on your infrastructure, create an ingest API key, and connect agents via SDK or MCP. All paths are self-hosted — no cloud LLM required.</p>
+    </div>
+
+    <div class="docs-layout">
+      <aside class="docs-sidebar">
+        <h2>On this page</h2>
+        <nav>
+          <a href="#overview">Overview</a>
+          <a href="#prerequisites">Prerequisites</a>
+          <div class="toc-group">
+            <h2>Guides</h2>
+            <a href="/causal-monitoring.html">Causal monitoring</a>
+          </div>
+          <div class="toc-group">
+            <h2>Installation</h2>
+            <a href="#install-docker">Docker Compose</a>
+            <a href="#install-local">Local development</a>
+            <a href="#install-helm">Kubernetes / Helm</a>
+          </div>
+          <div class="toc-group">
+            <h2>Connect agents</h2>
+            <a href="#connect-api-key">API key setup</a>
+            <a href="#connect-typescript">TypeScript SDK</a>
+            <a href="#connect-python">Python SDK</a>
+            <a href="#connect-mcp">MCP proxy</a>
+            <a href="#connect-adapters">Framework adapters</a>
+            <a href="#connect-env">Environment variables</a>
+            <a href="#connect-troubleshooting">Troubleshooting</a>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="docs-main">
+        <section class="doc-section" id="prerequisites">
+          <h2>Prerequisites</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Requirement</th><th>When needed</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Docker 24+</strong></td><td>Docker Compose stack</td></tr>
+                <tr><td><strong>Node.js 20+</strong></td><td>Local dev, TypeScript SDK, sample agents</td></tr>
+                <tr><td><strong>Python 3.10+</strong></td><td>MCP proxy, Python SDK, framework adapters</td></tr>
+                <tr><td><strong>6+ GB RAM</strong></td><td>Docker stack with Ollama (~3 GB models on first pull)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="doc-callout">
+            <strong>LLM enrichment</strong> uses local Ollama only — <code>nomic-embed-text</code> (embeddings) and <code>llama3.2:3b</code> (blame reasons). No OpenAI or Anthropic keys required for the platform.
+          </div>
+
+          <div class="path-cards">
+            <a class="path-card" href="/causal-monitoring.html"><h4>How monitoring works</h4><p>Pipeline, blame logic, confidence gates, dashboard KPIs</p></a>
+            <a class="path-card" href="#install-docker"><h4>Run full stack</h4><p>Docker Compose — fastest path to production-like setup</p></a>
+            <a class="path-card" href="#install-local"><h4>Develop locally</h4><p>Hot reload for API, ingest, workers, dashboard</p></a>
+            <a class="path-card" href="#connect-typescript"><h4>Connect TypeScript</h4><p>Emit CausalEdges from Node agents</p></a>
+            <a class="path-card" href="#connect-mcp"><h4>Connect via MCP</h4><p>Zero-code proxy for MCP tool servers</p></a>
+          </div>
+        </section>
+
+        <!-- ── INSTALLATION ── -->
+
+        <section class="doc-section" id="install-docker">
+          <h2>Installation — Docker Compose</h2>
+          <p>Runs API, ingest, workers, dashboard, Postgres, ClickHouse, Redpanda, Valkey, and Ollama in one command.</p>
+
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">git clone</span> https://github.com/prithvirajualluri/blamr <span class="cmd">&amp;&amp;</span> <span class="cmd">cd</span> blamr
+<span class="cmd">cp</span> .env.docker.example .env
+<span class="cmd">./scripts/docker-up.sh</span></pre>
+          </div>
+
+          <p>Or manually:</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">docker compose up --build -d</span></pre>
+          </div>
+
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Service</th><th>URL</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td>Dashboard</td><td><code>http://localhost:8080</code></td><td>Operator UI (runs, blame graphs)</td></tr>
+                <tr><td>API</td><td><code>http://localhost:3000</code></td><td>Auth, workspace, blame reports</td></tr>
+                <tr><td>Ingest</td><td><code>http://localhost:3001/v1</code></td><td>Agent telemetry — SDK target</td></tr>
+                <tr><td>Ollama</td><td><code>http://localhost:11434</code></td><td>Local embeddings + LLM</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="doc-callout">
+            <strong>First run:</strong> open the dashboard → register a workspace → <strong>Settings → API &amp; keys</strong> → create a key with <code>ingest:write</code>. You need this key to connect agents (see <a href="#connect-api-key" style="color:var(--cyL)">Connect agents</a>).
+          </div>
+        </section>
+
+        <section class="doc-section" id="install-local">
+          <h2>Installation — Local development</h2>
+          <p>For active development with hot reload on API, ingest, workers, and the web dashboard.</p>
+
+          <h3>1. Clone and install</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">git clone</span> https://github.com/prithvirajualluri/blamr <span class="cmd">&amp;&amp;</span> <span class="cmd">cd</span> blamr
+<span class="cmd">cp</span> .env.example .env
+<span class="cmd">npm install</span></pre>
+          </div>
+
+          <h3>2. Start infrastructure</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">docker compose up -d</span> postgres clickhouse redpanda valkey ollama ollama-init
+<span class="cmd">./scripts/init-clickhouse.sh</span></pre>
+          </div>
+          <p>Wait for <code>ollama-init</code> to finish on first run (pulls models).</p>
+
+          <h3>3. Start platform services</h3>
+          <p><strong>Terminal A</strong> — backend (API + ingest + workers):</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal A</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">./scripts/dev-backend.sh</span></pre>
+          </div>
+          <p><strong>Terminal B</strong> — dashboard:</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal B</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">npm run dev:web</span></pre>
+          </div>
+          <p>Open <a href="http://localhost:8080/app" style="color:var(--cyL)">http://localhost:8080/app</a> for the operator console.</p>
+
+          <h3>4. Run sample workflows (optional)</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">cp</span> samples/agents/.env.example samples/agents/.env
+<span class="cm"># Edit samples/agents/.env — set BLAMR_API_KEY from dashboard</span>
+<span class="cmd">./scripts/run-workflow.sh</span> support</pre>
+          </div>
+        </section>
+
+        <section class="doc-section" id="install-helm">
+          <h2>Installation — Kubernetes / Helm</h2>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">cd</span> deploy/helm
+<span class="cmd">helm dependency update</span>
+<span class="cmd">helm install</span> blamr . -n blamr --create-namespace -f values-local.yaml</pre>
+          </div>
+          <p>Chart includes API, ingest, workers, web, ClickHouse, Redpanda, Ollama, Postgres, and Valkey. See <a href="https://github.com/prithvirajualluri/blamr/blob/main/deploy/helm/README.md" target="_blank" rel="noreferrer" style="color:var(--cyL)">deploy/helm/README.md</a> for production ingress and secrets.</p>
+        </section>
+
+        <!-- ── CONNECTION ── -->
+
+        <section class="doc-section" id="connect-api-key">
+          <h2>Connect agents — API key setup</h2>
+          <p>Agents send telemetry to the <strong>ingest</strong> service (<code>:3001</code>), not the dashboard API (<code>:3000</code>).</p>
+
+          <div class="flow-diagram" aria-hidden="true">
+            <svg viewBox="0 0 520 80" xmlns="http://www.w3.org/2000/svg">
+              <rect x="10" y="25" width="90" height="30" rx="6" fill="#0F1C30" stroke="#0891B2"/>
+              <text x="55" y="44" text-anchor="middle" fill="#22D3EE" font-size="10" font-family="monospace">Your agent</text>
+              <line x1="100" y1="40" x2="160" y2="40" stroke="#0891B2" stroke-width="2" marker-end="url(#arr)"/>
+              <rect x="160" y="25" width="100" height="30" rx="6" fill="#0F1C30" stroke="#0891B2"/>
+              <text x="210" y="44" text-anchor="middle" fill="#94A3B8" font-size="9" font-family="monospace">Ingest :3001</text>
+              <line x1="260" y1="40" x2="320" y2="40" stroke="#475569" stroke-width="1.5"/>
+              <rect x="320" y="25" width="90" height="30" rx="6" fill="#0F1C30" stroke="#475569"/>
+              <text x="365" y="44" text-anchor="middle" fill="#94A3B8" font-size="9" font-family="monospace">Workers</text>
+              <line x1="410" y1="40" x2="460" y2="40" stroke="#475569" stroke-width="1.5"/>
+              <rect x="460" y="25" width="50" height="30" rx="6" fill="#0F1C30" stroke="#475569"/>
+              <text x="485" y="44" text-anchor="middle" fill="#94A3B8" font-size="9" font-family="monospace">UI</text>
+              <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#0891B2"/></marker></defs>
+            </svg>
+          </div>
+
+          <ol>
+            <li>Start blamr (Docker or local dev).</li>
+            <li>Open dashboard → register → <strong>Settings → API &amp; keys</strong>.</li>
+            <li>Create key with scope <code>ingest:write</code>.</li>
+            <li>Set <code>BLAMR_API_KEY</code> and <code>BLAMR_ENDPOINT</code> in your agent environment.</li>
+          </ol>
+        </section>
+
+        <section class="doc-section" id="connect-typescript">
+          <h2>Connect agents — TypeScript SDK</h2>
+
+          <h3>Install</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>From monorepo</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">git clone</span> https://github.com/prithvirajualluri/blamr <span class="cmd">&amp;&amp;</span> <span class="cmd">cd</span> blamr
+<span class="cmd">npm install</span>
+<span class="cmd">npm run build -w</span> @blamr/types -w @blamr/sdk</pre>
+          </div>
+          <p>Link in your agent project:</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>package.json</span><button type="button" class="code-copy">Copy</button></div>
+            <pre>{
+  "dependencies": {
+    "@blamr/sdk": "file:../blamr/packages/sdk-ts",
+    "@blamr/types": "file:../blamr/packages/types"
+  }
+}</pre>
+          </div>
+
+          <h3>Minimal usage</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>TypeScript</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">import</span> { BlamrEmitter } from '@blamr/sdk';
+
+<span class="cmd">const</span> emitter = <span class="cmd">new</span> BlamrEmitter(
+  { workflowId: <span class="str">'customer-support'</span>, agentId: <span class="str">'intent_classifier'</span> },
+  process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? <span class="str">'http://localhost:3001/v1'</span>,
+);
+
+emitter.startRun();
+<span class="cmd">await</span> emitter.emitEdge({
+  from_agent: <span class="str">'intent_classifier'</span>,
+  to_agent: <span class="str">'policy_lookup'</span>,
+  confidence_in: 1.0,
+  confidence_out: 0.92,
+  intent_delta: 0.05,
+  influence_score: 0.85,
+  tokens_in: 120,
+  tokens_out: 45,
+  latency_ms: 800,
+  model: <span class="str">'llama3.2:3b'</span>,
+  call_type: <span class="str">'LLM call'</span>,
+  input_preview: <span class="str">'User question…'</span>,
+  output_preview: <span class="str">'Classified as billing…'</span>,
+});
+<span class="cmd">await</span> emitter.completeRun({ businessFailed: <span class="cmd">false</span> });</pre>
+          </div>
+
+          <h3>Confidence gate (optional)</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>TypeScript</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">const</span> emitter = <span class="cmd">new</span> BlamrEmitter(
+  {
+    workflowId: <span class="str">'incident-triage'</span>,
+    agentId: <span class="str">'alert_classifier'</span>,
+    workflowConfig: {
+      confidence_accept_level: 0.72,
+      confidence_gate_mode: <span class="str">'final'</span>, <span class="cm">// or 'min'</span>
+    },
+  },
+  process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? <span class="str">'http://localhost:3001/v1'</span>,
+);</pre>
+          </div>
+        </section>
+
+        <section class="doc-section" id="connect-python">
+          <h2>Connect agents — Python SDK</h2>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">pip install</span> ./packages/sdk-py</pre>
+          </div>
+          <div class="code-block">
+            <div class="code-block-header"><span>Python</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">from</span> blamr_sdk.client <span class="cmd">import</span> BlamrEmitter
+
+emitter = BlamrEmitter(
+    workflow_id=<span class="str">"my-workflow"</span>,
+    agent_id=<span class="str">"my_agent"</span>,
+    api_key=os.environ[<span class="str">"BLAMR_API_KEY"</span>],
+    endpoint=os.environ.get(<span class="str">"BLAMR_ENDPOINT"</span>, <span class="str">"http://localhost:3001/v1"</span>),
+)
+run_id = emitter.start_run()
+emitter.emit_edge(
+    from_agent=<span class="str">"my_agent"</span>,
+    to_agent=<span class="str">"next_agent"</span>,
+    confidence_in=1.0,
+    confidence_out=0.9,
+    intent_delta=0.05,
+    influence_score=0.8,
+    input_preview=<span class="str">"user input"</span>,
+    output_preview=<span class="str">"agent output"</span>,
+)
+emitter.complete_run(<span class="str">"success"</span>)</pre>
+          </div>
+        </section>
+
+        <section class="doc-section" id="connect-mcp">
+          <h2>Connect agents — MCP proxy</h2>
+          <p>Wrap any MCP server with zero code changes. The Python proxy intercepts <code>tools/call</code> and emits CausalEdges automatically.</p>
+          <div class="doc-callout">There is no global <code>blamr</code> CLI. MCP integration uses <code>adapters/mcp/blamr_proxy.py</code> in the repo.</div>
+
+          <h3>Stdio MCP server (local)</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">export</span> BLAMR_API_KEY=bk_live_...
+<span class="cmd">export</span> BLAMR_ENDPOINT=http://localhost:3001/v1
+<span class="cmd">python3</span> adapters/mcp/blamr_proxy.py run \
+  --workflow-id customer-support \
+  --api-key <span class="str">"$BLAMR_API_KEY"</span> \
+  -- npx @modelcontextprotocol/server-filesystem /tmp</pre>
+          </div>
+
+          <h3>HTTP / SSE MCP server (remote)</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">python3</span> adapters/mcp/blamr_proxy.py proxy \
+  --workflow-id customer-support \
+  --target https://your-mcp-server.example.com/mcp \
+  --api-key <span class="str">"$BLAMR_API_KEY"</span></pre>
+          </div>
+          <p>Every tool call emits a CausalEdge with <code>call_type: MCP call</code>, truncated I/O previews, and automatic run completion.</p>
+        </section>
+
+        <section class="doc-section" id="connect-adapters">
+          <h2>Connect agents — Framework adapters</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Framework</th><th>Path in repo</th></tr></thead>
+              <tbody>
+                <tr><td>LangGraph</td><td><code>adapters/langgraph/</code></td></tr>
+                <tr><td>CrewAI</td><td><code>adapters/crewai/</code></td></tr>
+                <tr><td>AutoGen</td><td><code>adapters/autogen/</code></td></tr>
+                <tr><td>MCP</td><td><code>adapters/mcp/</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="code-block">
+            <div class="code-block-header"><span>LangGraph example</span><button type="button" class="code-copy">Copy</button></div>
+            <pre><span class="cmd">from</span> blamr.adapters.langgraph <span class="cmd">import</span> BlamrNode
+
+graph.add_node(<span class="str">"blamr_trace"</span>, BlamrNode(workflow_id=<span class="str">"customer-support"</span>))</pre>
+          </div>
+          <p>All adapters require a running ingest endpoint and <code>BLAMR_API_KEY</code>.</p>
+        </section>
+
+        <section class="doc-section" id="connect-env">
+          <h2>Environment variables</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>BLAMR_API_KEY</code></td><td>—</td><td>Ingest key with <code>ingest:write</code> scope</td></tr>
+                <tr><td><code>BLAMR_ENDPOINT</code></td><td><code>http://localhost:3001/v1</code></td><td>Ingest base URL (not dashboard :3000)</td></tr>
+                <tr><td><code>BLAMR_LLM_BASE_URL</code></td><td><code>http://localhost:11434/v1</code></td><td>Ollama for sample agents / enrichment</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Example <code>samples/agents/.env</code>:</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>.env</span><button type="button" class="code-copy">Copy</button></div>
+            <pre>BLAMR_API_KEY=bk_live_xxxxxxxxxxxxxxxx
+BLAMR_ENDPOINT=http://localhost:3001/v1
+BLAMR_LLM_BASE_URL=http://localhost:11434/v1</pre>
+          </div>
+        </section>
+
+        <section class="doc-section" id="connect-troubleshooting">
+          <h2>Troubleshooting</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+              <tbody>
+                <tr><td>Dashboard empty after workflow</td><td>Workers not running — <code>docker compose logs workers</code></td></tr>
+                <tr><td>Ingest 401</td><td>Invalid or missing <code>BLAMR_API_KEY</code></td></tr>
+                <tr><td>SDK hits wrong URL</td><td>Set <code>BLAMR_ENDPOINT</code> to ingest (<code>:3001/v1</code>), not API (<code>:3000</code>)</td></tr>
+                <tr><td>Semantic drift errors</td><td>Ollama not ready — <code>curl http://localhost:11434/api/tags</code></td></tr>
+                <tr><td>Port conflicts on 3000/8080</td><td>Stop local dev before <code>docker compose up</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Full reference: <a href="/causal-monitoring.html" style="color:var(--cyL)">Causal monitoring guide</a> · <a href="https://github.com/prithvirajualluri/blamr/blob/main/docs/INSTALL.md" target="_blank" rel="noreferrer" style="color:var(--cyL)">docs/INSTALL.md</a> · <a href="https://github.com/prithvirajualluri/blamr/blob/main/docs/DEPLOYMENT.md" target="_blank" rel="noreferrer" style="color:var(--cyL)">docs/DEPLOYMENT.md</a></p>
+        </section>
+      </main>
+    </div>
+
+    <footer class="landing-footer">
+      <img class="landing-footer-logo" src="assets/blamr_logo.svg" alt="blamr" width="182" height="40" />
+      <div class="landing-footer-links">
+        <a href="/">Home</a>
+        <a href="/docs.html">Installation</a>
+        <a href="/causal-monitoring.html">Causal monitoring</a>
+        <a href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+    </footer>
+  </div>
+  <script src="docs.js"></script>
+</body>
+</html>

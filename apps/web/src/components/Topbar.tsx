@@ -79,41 +79,55 @@ export function breadcrumbsForView(
   runTitle?: string,
   handlers?: {
     goMonitor?: () => void;
+    goWorkflows?: () => void;
+    goAgents?: () => void;
     goList?: () => void;
     goSettings?: () => void;
     goConnect?: () => void;
+    goUsers?: () => void;
   },
+  detailSource?: DetailSource,
 ): BreadcrumbItem[] {
   switch (view) {
     case 'monitor':
-      return [{ label: 'Live monitor', onClick: handlers?.goMonitor }];
+      return [{ label: 'Overview', onClick: handlers?.goMonitor }];
+    case 'workflows':
+      return [
+        { label: 'Overview', onClick: handlers?.goMonitor },
+        { label: 'Workflows', onClick: handlers?.goWorkflows },
+      ];
+    case 'agents':
+      return [
+        { label: 'Overview', onClick: handlers?.goMonitor },
+        { label: 'Agents', onClick: handlers?.goAgents },
+      ];
     case 'list':
       return [
-        { label: 'Monitor', onClick: handlers?.goMonitor },
-        { label: 'Runs', onClick: handlers?.goList },
+        { label: 'Overview', onClick: handlers?.goMonitor },
+        { label: 'Executions', onClick: handlers?.goList },
       ];
     case 'detail':
       return [
-        { label: 'Monitor', onClick: handlers?.goMonitor },
-        { label: 'Runs', onClick: handlers?.goList },
+        { label: 'Overview', onClick: handlers?.goMonitor },
+        { label: detailSource === 'monitor' ? 'Overview' : 'Executions', onClick: detailSource === 'monitor' ? handlers?.goMonitor : handlers?.goList },
         { label: runTitle ?? 'Run detail' },
       ];
     case 'connect':
       return [
-        { label: 'Monitor', onClick: handlers?.goMonitor },
+        { label: 'Overview', onClick: handlers?.goMonitor },
         { label: 'Connect agents', onClick: handlers?.goConnect },
       ];
     case 'settings':
       return [
-        { label: 'Monitor', onClick: handlers?.goMonitor },
+        { label: 'Overview', onClick: handlers?.goMonitor },
         { label: 'API & keys', onClick: handlers?.goSettings },
       ];
     case 'users':
       return [
-        { label: 'Monitor', onClick: handlers?.goMonitor },
-        { label: 'Team' },
+        { label: 'Overview', onClick: handlers?.goMonitor },
+        { label: 'Team', onClick: handlers?.goUsers },
       ];
     default:
-      return [{ label: 'Live monitor' }];
+      return [{ label: 'Overview' }];
   }
 }

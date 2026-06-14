@@ -21,11 +21,12 @@ Span tools log *what happened*. blamr answers **which agent caused the failure, 
 | **[Deployment](docs/DEPLOYMENT.md)** | Full Docker stack, env vars, production checklist |
 | **[Operations](docs/OPERATIONS.md)** | Workers, health checks, day-2 ops |
 | **[Concepts](docs/CONCEPTS.md)** | CausalEdge fields, confidence gates, drift, blame attribution |
+| **[Causal monitoring](docs/CAUSAL_MONITORING.md)** | End-to-end pipeline, business logic, dashboard KPIs |
 | **[Sample agents](samples/agents/README.md)** | Four Ollama-powered multi-agent workflows |
 | **[Contributing](CONTRIBUTING.md)** | Dev setup, tests, release notes |
 | **[Publishing](docs/PUBLISHING.md)** | Maintainer release checklist |
 
-Static marketing site + install docs: [`marketing-site/`](marketing-site/) (open `index.html` or `docs.html` locally).
+Static marketing site: [`marketing-site/`](marketing-site/) — [install guide](marketing-site/docs.html) · [causal monitoring](marketing-site/causal-monitoring.html) (or `/docs.html` and `/causal-monitoring.html` on the deployed dashboard host).
 
 ---
 
@@ -52,6 +53,8 @@ cp .env.docker.example .env
 | **1. Instrument** | SDK, MCP proxy, or adapter emits a `CausalEdge` at every agent handoff |
 | **2. Graph** | Ingest → Kafka → workers store edges, compute semantic drift and ML signals |
 | **3. Attribute** | On run completion, blame propagates backward; dashboard shows root cause + reasons |
+
+→ Full business logic: **[docs/CAUSAL_MONITORING.md](docs/CAUSAL_MONITORING.md)** · [marketing site guide](marketing-site/causal-monitoring.html)
 
 ---
 

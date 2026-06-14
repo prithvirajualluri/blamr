@@ -17,14 +17,20 @@ interface RunDetailViewProps {
   runId: string;
   tab?: DetailTab;
   onTabChange?: (tab: DetailTab) => void;
+  run?: RunDetail | null;
+  loading?: boolean;
+  error?: string | null;
 }
 
 export type DetailTab = 'graph' | 'trace' | 'cost' | 'blame' | 'timeline';
 
 const ALL_TABS: DetailTab[] = ['graph', 'trace', 'cost', 'blame', 'timeline'];
 
-export function RunDetailView({ runId, tab: controlledTab, onTabChange }: RunDetailViewProps) {
-  const { run, loading, error } = useRunDetail(runId);
+export function RunDetailView({ runId, tab: controlledTab, onTabChange, run: runProp, loading: loadingProp, error: errorProp }: RunDetailViewProps) {
+  const internal = useRunDetail(runProp === undefined ? runId : null);
+  const run = runProp !== undefined ? runProp : internal.run;
+  const loading = loadingProp ?? internal.loading;
+  const error = errorProp ?? (runProp !== undefined ? null : internal.error);
   const [internalTab, setInternalTab] = useState<DetailTab>('graph');
   const tab = controlledTab ?? internalTab;
 

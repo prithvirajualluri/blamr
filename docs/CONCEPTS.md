@@ -2,6 +2,8 @@
 
 How blamr models multi-agent failures — causal edges, drift signals, and blame attribution.
 
+For the full end-to-end pipeline and dashboard business logic, see **[CAUSAL_MONITORING.md](./CAUSAL_MONITORING.md)**.
+
 For installation and SDK usage, see [INSTALL.md](./INSTALL.md).
 
 ---

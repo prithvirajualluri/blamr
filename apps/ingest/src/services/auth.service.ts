@@ -47,7 +47,8 @@ export class AuthService {
     private readonly valkey: ValkeyService,
   ) {}
 
-  async validateApiKey(apiKey: string): Promise<CachedApiKey | null> {
+  async validateApiKey(apiKey: string | undefined): Promise<CachedApiKey | null> {
+    if (!apiKey?.trim()) return null;
     const prefix = apiKey.substring(0, 14);
     const cached = await this.valkey.getCachedApiKey(prefix);
     if (cached) return cached.status === 'active' ? cached : null;

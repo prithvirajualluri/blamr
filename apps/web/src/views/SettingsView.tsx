@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { fetchKeys, fetchWebhooks, fetchWorkspace, patchWorkspaceSettings, createKey, revokeKey } from '../api/runs';
+import { fetchKeys, fetchWebhooks, fetchWorkspace, patchWorkspaceSettings, createKey, revokeKey, createWebhook, deleteWebhook, testWebhook } from '../api/runs';
 import { ApiBanner, EmptyState } from '../components/ApiBanner';
 import { IconChart, IconBell } from '../components/icons';
 import { hasApiCredentials } from '../api/client';
@@ -43,6 +43,11 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   const [wfJson, setWfJson] = useState('');
   const [wfSaving, setWfSaving] = useState(false);
+  const [showWebhookForm, setShowWebhookForm] = useState(false);
+  const [whName, setWhName] = useState('');
+  const [whUrl, setWhUrl] = useState('');
+  const [whSecret, setWhSecret] = useState('');
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   useEffect(() => {
     const settings = workspace?.settings as { workflow_configs?: Record<string, unknown> } | undefined;
@@ -67,6 +72,7 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
       setKeys(k as unknown as KeyRow[]);
       setWebhooks(w);
       setWorkspace(ws);
+      setWorkspaceError(ws ? null : 'Could not load workspace settings');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load settings');
     } finally {
@@ -170,14 +176,40 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
 
       {!loading && tab === 'webhooks' && (
         <div className="panel">
-          <div className="panel-hdr"><IconBell /> Webhooks</div>
+          <div className="panel-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span><IconBell /> Webhooks</span>
+            <button type="button" className="btn btn-sm" onClick={() => setShowWebhookForm(true)}>+ Add webhook</button>
+          </div>
           {webhooks.length ? webhooks.map((wh) => (
-            <div key={String(wh.id)} style={{ background: 'var(--bg3)', borderRadius: 'var(--rad)', padding: 12, marginBottom: 8 }}>
-              <strong>{String(wh.name)}</strong>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--muL)', marginTop: 4 }}>{String(wh.url)}</div>
+            <div key={String(wh.id)} style={{ background: 'var(--bg3)', borderRadius: 'var(--rad)', padding: 12, marginBottom: 8, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <strong>{String(wh.name)}</strong>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--muL)', marginTop: 4 }}>{String(wh.url)}</div>
+              </div>
+              <button type="button" className="btn btn-sm" onClick={async () => {
+                try {
+                  await testWebhook(String(wh.id));
+                  toast('success', 'Test event sent');
+                } catch {
+                  toast('error', 'Test failed');
+                }
+              }}>Test</button>
+              <button type="button" className="btn btn-sm" style={{ color: 'var(--reL)' }} onClick={async () => {
+                try {
+                  await deleteWebhook(String(wh.id));
+                  toast('warn', 'Webhook deleted');
+                  reload();
+                } catch {
+                  toast('error', 'Delete failed');
+                }
+              }}>Delete</button>
             </div>
-          )) : <EmptyState title="No webhooks" subtitle="Add a webhook endpoint to receive blame and run events." />}
+          )) : <EmptyState title="No webhooks" subtitle="Add a webhook endpoint to receive blame and run events." actionLabel="+ Add webhook" onAction={() => setShowWebhookForm(true)} />}
         </div>
+      )}
+
+      {!loading && tab === 'workspace' && !workspace && (
+        <EmptyState title="Workspace unavailable" subtitle={workspaceError ?? 'Could not load workspace. Check API connection and permissions.'} />
       )}
 
       {!loading && tab === 'workspace' && workspace && (
@@ -227,6 +259,31 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
             </button>
           </div>
         </>
+      )}
+
+      {showWebhookForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--b1)', borderRadius: 'var(--rad-lg)', padding: 24, maxWidth: 500, width: '90%' }}>
+            <h3 style={{ marginBottom: 16 }}>Add webhook</h3>
+            <input placeholder="Name" value={whName} onChange={(e) => setWhName(e.target.value)} style={{ width: '100%', marginBottom: 8 }} />
+            <input placeholder="URL" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} style={{ width: '100%', marginBottom: 8 }} />
+            <input placeholder="Signing secret" value={whSecret} onChange={(e) => setWhSecret(e.target.value)} style={{ width: '100%', marginBottom: 12 }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn" onClick={() => setShowWebhookForm(false)}>Cancel</button>
+              <button type="button" className="btn-primary" onClick={async () => {
+                try {
+                  await createWebhook({ name: whName || 'Webhook', url: whUrl, secret: whSecret || 'changeme', events: ['run.completed', 'blame.ready'] });
+                  toast('success', 'Webhook created');
+                  setShowWebhookForm(false);
+                  setWhName(''); setWhUrl(''); setWhSecret('');
+                  reload();
+                } catch {
+                  toast('error', 'Failed to create webhook');
+                }
+              }}>Create</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showCreate && (

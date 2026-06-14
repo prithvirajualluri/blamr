@@ -3,6 +3,13 @@ import { getStoredToken, clearStoredToken } from '../auth/storage';
 
 const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
 
+type UnauthorizedHandler = () => void;
+let onUnauthorized: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  onUnauthorized = handler;
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -18,7 +25,7 @@ function parseErrorBody(text: string, status: number): string {
   } catch {
     /* not JSON */
   }
-  if (status === 401) return 'Invalid email or password';
+  if (status === 401) return 'Session expired — please sign in again';
   return text || `HTTP ${status}`;
 }
 
@@ -46,6 +53,7 @@ export async function apiFetch<T>(path: string, init?: FetchOpts): Promise<T> {
   }
   if (res.status === 401 && !init?.skipAuth) {
     clearStoredToken();
+    onUnauthorized?.();
   }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -56,10 +64,5 @@ export async function apiFetch<T>(path: string, init?: FetchOpts): Promise<T> {
 }
 
 export function hasApiCredentials(): boolean {
-  return Boolean(getStoredToken()) || Boolean(API_KEY);
-}
-
-/** @deprecated use hasApiCredentials */
-export function hasApiKey(): boolean {
-  return hasApiCredentials();
+  return Boolean(getStoredToken() || API_KEY);
 }

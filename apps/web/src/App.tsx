@@ -4,6 +4,8 @@ import { Topbar, breadcrumbsForView } from './components/Topbar';
 import { ToastContainer, useToasts } from './components/Toast';
 import { KeyboardOverlay } from './components/KeyboardOverlay';
 import { MonitorView } from './views/MonitorView';
+import { WorkflowsView } from './views/WorkflowsView';
+import { AgentsView } from './views/AgentsView';
 import { RunsListView } from './views/RunsListView';
 import { RunDetailView, nextDetailTab, type DetailTab } from './views/RunDetailView';
 import { ConnectView } from './views/ConnectView';
@@ -11,68 +13,205 @@ import { SettingsView } from './views/SettingsView';
 import { UsersView } from './views/UsersView';
 import { LoginView, RegisterTenantView, AcceptInviteView } from './views/auth/AuthViews';
 import { LandingView } from './views/LandingView';
-import { useRuns, useRunDetail } from './hooks/useRuns';
+import {
+  useMetricsOverview,
+  usePaginatedRuns,
+  useWorkflowsList,
+  useAgentsList,
+  useRunDetail,
+} from './hooks/useRuns';
 import { AuthProvider, useAuth } from './auth/AuthContext';
-import { hasApiCredentials } from './api/client';
+import { hasApiCredentials, setUnauthorizedHandler } from './api/client';
 import { navigateTo, useIsOperatorApp } from './routing';
+import { AppShell } from './components/AppShell';
+import { FirstTimeOnboarding } from './components/FirstTimeOnboarding';
+import type { OnboardingVariant } from './components/FirstTimeOnboarding';
+import { isOnboardingComplete, markOnboardingComplete } from './auth/onboarding';
+import {
+  parseAppRoute,
+  hashForRoute,
+  navIdForView,
+  runFilterFromHash,
+} from './app-routing';
+import { exportRunNdjson } from './api/runs';
+import { RUNS_PAGE_SIZE } from './utils/registry';
 import type { View, RunFilter, DetailSource } from './types';
 
 function AuthenticatedApp() {
-  const { user, logout } = useAuth();
-  const [view, setView] = useState<View>('monitor');
-  const [runFilter, setRunFilter] = useState<RunFilter>('all');
+  const { user, logout, onboardingTrigger, clearOnboardingTrigger } = useAuth();
+  const initialRoute = parseAppRoute();
+  const [view, setViewState] = useState<View>(initialRoute.view);
+  const [runFilter, setRunFilter] = useState<RunFilter>(() => runFilterFromHash());
   const [search, setSearch] = useState('');
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [workflowFilter, setWorkflowFilter] = useState<string | undefined>();
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRoute.runId ?? null);
   const [detailSource, setDetailSource] = useState<DetailSource>('list');
   const [detailTab, setDetailTab] = useState<DetailTab>('graph');
   const [showKb, setShowKb] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingVariant, setOnboardingVariant] = useState<OnboardingVariant>('empty-workspace');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activeNav, setActiveNav] = useState<string | undefined>('monitor');
+  const [activeNav, setActiveNav] = useState(() => navIdForView(initialRoute.view, runFilterFromHash()));
+  const [execPage, setExecPage] = useState(1);
+  const [wfPage, setWfPage] = useState(1);
+  const [agentPage, setAgentPage] = useState(1);
+  const [wfHealth, setWfHealth] = useState('all');
+  const [wfSort, setWfSort] = useState('runs');
   const kbBuf = useRef('');
   const kbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toasts, addToast, dismiss } = useToasts();
-  const { runs, loading, error, reload } = useRuns(refreshKey, true);
-  const { run: selectedRun } = useRunDetail(view === 'detail' ? selectedRunId : null, true);
 
-  const goMonitor = useCallback(() => {
-    setView('monitor');
-    setSelectedRunId(null);
-    setActiveNav('monitor');
+  const { metrics, loading: metricsLoading, error: metricsError, reload: reloadMetrics } = useMetricsOverview(refreshKey);
+  const { workflows: topWorkflows, total: workflowsTotal, loading: wfLoading, error: wfError } = useWorkflowsList(
+    { limit: 12, offset: 0, health: wfHealth === 'all' ? undefined : wfHealth, sort: wfSort },
+    refreshKey,
+    view === 'monitor',
+  );
+  const { workflows: wfList, total: wfListTotal, loading: wfListLoading, error: wfListError } = useWorkflowsList(
+    { limit: 40, offset: (wfPage - 1) * 40, q: view === 'workflows' ? search : undefined, health: wfHealth === 'all' ? undefined : wfHealth, sort: wfSort },
+    refreshKey,
+    view === 'workflows',
+  );
+  const { agents, total: agentsTotal, loading: agentsLoading, error: agentsError } = useAgentsList(
+    { limit: 40, offset: (agentPage - 1) * 40, q: view === 'agents' ? search : undefined },
+    refreshKey,
+    view === 'agents',
+  );
+  const execStatus = runFilter === 'all' ? undefined : runFilter;
+  const { runs, total: runsTotal, counts, loading: runsLoading, error: runsError } = usePaginatedRuns(
+    {
+      status: execStatus,
+      workflow_id: workflowFilter,
+      q: view === 'list' ? search : undefined,
+      limit: RUNS_PAGE_SIZE,
+      offset: (execPage - 1) * RUNS_PAGE_SIZE,
+    },
+    refreshKey,
+    view === 'list' || view === 'detail',
+  );
+  const { runs: recentFailures } = usePaginatedRuns(
+    { status: 'failed', limit: 8, offset: 0 },
+    refreshKey,
+    view === 'monitor',
+  );
+  const { run: selectedRun, loading: detailLoading, error: detailError } = useRunDetail(view === 'detail' ? selectedRunId : null, view === 'detail');
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      logout();
+      addToast('warn', 'Session expired — please sign in again');
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [logout, addToast]);
+
+  const pushRoute = useCallback((nextView: View, runId?: string | null, filter?: RunFilter) => {
+    const hash = hashForRoute(
+      { view: nextView, runId: runId ?? undefined },
+      filter ?? runFilter,
+    );
+    window.history.pushState(null, '', hash);
+  }, [runFilter]);
+
+  const setView = useCallback((v: View, opts?: { runId?: string | null; filter?: RunFilter; source?: DetailSource }) => {
+    setViewState(v);
+    if (v !== 'list' && v !== 'detail') {
+      setWorkflowFilter(undefined);
+    }
+    if (opts?.filter) setRunFilter(opts.filter);
+    if (v === 'detail' && opts?.runId) {
+      setSelectedRunId(opts.runId);
+      if (opts.source) setDetailSource(opts.source);
+      pushRoute('detail', opts.runId);
+      setActiveNav(navIdForView('list', opts.filter ?? runFilter));
+    } else if (v !== 'detail') {
+      setSelectedRunId(null);
+      pushRoute(v, null, opts?.filter ?? runFilter);
+      setActiveNav(navIdForView(v, opts?.filter ?? runFilter));
+    }
+  }, [pushRoute, runFilter]);
+
+  const syncFromHash = useCallback(() => {
+    const route = parseAppRoute();
+    const filter = runFilterFromHash();
+    setRunFilter(filter);
+    if (route.view === 'detail' && route.runId) {
+      setViewState('detail');
+      setSelectedRunId(route.runId);
+      setActiveNav(navIdForView('list', filter));
+    } else {
+      setViewState(route.view);
+      setSelectedRunId(null);
+      setActiveNav(navIdForView(route.view, filter));
+      if (route.view !== 'list') setWorkflowFilter(undefined);
+    }
   }, []);
 
+  useEffect(() => {
+    window.addEventListener('hashchange', syncFromHash);
+    window.addEventListener('popstate', syncFromHash);
+    return () => {
+      window.removeEventListener('hashchange', syncFromHash);
+      window.removeEventListener('popstate', syncFromHash);
+    };
+  }, [syncFromHash]);
+
+  useEffect(() => {
+    if (!user) {
+      setShowOnboarding(false);
+      return;
+    }
+    if (isOnboardingComplete(user.workspace_id)) {
+      setShowOnboarding(false);
+      clearOnboardingTrigger();
+      return;
+    }
+    if (onboardingTrigger) {
+      setOnboardingVariant(onboardingTrigger);
+      setShowOnboarding(true);
+      return;
+    }
+    if (!metricsLoading && metrics && metrics.executions.total === 0) {
+      setOnboardingVariant('empty-workspace');
+      setShowOnboarding(true);
+    }
+  }, [user, onboardingTrigger, metricsLoading, metrics, clearOnboardingTrigger]);
+
+  const goMonitor = useCallback(() => setView('monitor'), [setView]);
+  const goWorkflows = useCallback(() => { setWfPage(1); setView('workflows'); }, [setView]);
+  const goAgents = useCallback(() => { setAgentPage(1); setView('agents'); }, [setView]);
   const goList = useCallback((filter?: RunFilter) => {
-    setView('list');
-    setSelectedRunId(null);
-    if (filter) setRunFilter(filter);
-    setActiveNav(filter === 'failed' ? 'na-fail' : filter === 'success' ? 'na-ok' : 'na-all');
-  }, []);
+    setExecPage(1);
+    setView('list', { filter: filter ?? 'all' });
+  }, [setView]);
+  const goConnect = useCallback(() => setView('connect'), [setView]);
+  const goSettings = useCallback(() => setView('settings'), [setView]);
+  const goUsers = useCallback(() => setView('users'), [setView]);
 
-  const goConnect = useCallback(() => {
-    setView('connect');
-    setSelectedRunId(null);
-    setActiveNav('connect');
-  }, []);
+  const dismissOnboarding = useCallback(() => {
+    if (user) markOnboardingComplete(user.workspace_id);
+    clearOnboardingTrigger();
+    setShowOnboarding(false);
+  }, [user, clearOnboardingTrigger]);
 
-  const goSettings = useCallback(() => {
-    setView('settings');
-    setSelectedRunId(null);
-    setActiveNav('settings');
-  }, []);
+  const onboardingGoSettings = useCallback(() => {
+    if (user) markOnboardingComplete(user.workspace_id);
+    clearOnboardingTrigger();
+    setShowOnboarding(false);
+    goSettings();
+  }, [user, clearOnboardingTrigger, goSettings]);
 
-  const goUsers = useCallback(() => {
-    setView('users');
-    setSelectedRunId(null);
-    setActiveNav('users');
-  }, []);
+  const onboardingGoConnect = useCallback(() => {
+    if (user) markOnboardingComplete(user.workspace_id);
+    clearOnboardingTrigger();
+    setShowOnboarding(false);
+    goConnect();
+  }, [user, clearOnboardingTrigger, goConnect]);
 
   const handleRunSelect = useCallback((id: string, from: DetailSource = 'list') => {
-    setSelectedRunId(id);
     setDetailSource(from);
     setDetailTab('graph');
-    setView('detail');
-    const r = runs.find((x) => x.id === id);
-    setActiveNav(r?.status === 'failed' ? 'na-fail' : 'na-ok');
-  }, [runs]);
+    setView('detail', { runId: id, source: from });
+  }, [setView]);
 
   const handleBack = useCallback(() => {
     setSelectedRunId(null);
@@ -80,16 +219,39 @@ function AuthenticatedApp() {
     else goList(runFilter);
   }, [detailSource, goMonitor, goList, runFilter]);
 
-  const handleRefresh = useCallback(() => {
-    reload();
-    addToast('success', 'Refreshed');
-    setRefreshKey((k) => k + 1);
-  }, [reload, addToast]);
+  const handleRefresh = useCallback(async () => {
+    try {
+      await reloadMetrics();
+      setRefreshKey((k) => k + 1);
+      addToast('success', 'Refreshed');
+    } catch {
+      addToast('error', 'Refresh failed');
+    }
+  }, [reloadMetrics, addToast]);
 
-  const handleWorkflowFilter = useCallback((wf: string) => {
-    setSearch(wf);
+  const handleWorkflowSelect = useCallback((wf: string) => {
+    setWorkflowFilter(wf);
+    setSearch('');
+    setExecPage(1);
     goList('all');
   }, [goList]);
+
+  const handleClearWorkflowFilter = useCallback(() => {
+    setWorkflowFilter(undefined);
+    setExecPage(1);
+  }, []);
+
+  useEffect(() => {
+    setExecPage(1);
+  }, [search, runFilter, workflowFilter]);
+
+  useEffect(() => {
+    setWfPage(1);
+  }, [search, wfHealth, wfSort]);
+
+  useEffect(() => {
+    setAgentPage(1);
+  }, [search]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -108,21 +270,21 @@ function AuthenticatedApp() {
         setDetailTab((t) => nextDetailTab(selectedRun, t, e.key === ']' ? 1 : -1));
         return;
       }
-
       kbBuf.current += e.key.toUpperCase();
       if (kbTimer.current) clearTimeout(kbTimer.current);
       kbTimer.current = setTimeout(() => { kbBuf.current = ''; }, 800);
       if (kbBuf.current === 'GM') { goMonitor(); kbBuf.current = ''; }
+      if (kbBuf.current === 'GW') { goWorkflows(); kbBuf.current = ''; }
       if (kbBuf.current === 'GR') { goList('all'); kbBuf.current = ''; }
       if (kbBuf.current === 'GC') { goConnect(); kbBuf.current = ''; }
       if (kbBuf.current === 'GK') { goSettings(); kbBuf.current = ''; }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [view, selectedRun, handleBack, goMonitor, goList, goConnect, goSettings]);
+  }, [view, selectedRun, handleBack, goMonitor, goWorkflows, goList, goConnect, goSettings]);
 
-  const handlers = { goMonitor, goList: () => goList('all'), goSettings, goConnect, goUsers };
-  const breadcrumbs = breadcrumbsForView(view, selectedRun?.title, handlers);
+  const handlers = { goMonitor, goWorkflows, goList: () => goList('all'), goSettings, goConnect, goUsers, goAgents };
+  const breadcrumbs = breadcrumbsForView(view, selectedRun?.title ?? selectedRunId ?? undefined, handlers, detailSource);
 
   const copyId = () => {
     if (!selectedRunId) return;
@@ -130,43 +292,132 @@ function AuthenticatedApp() {
     addToast('success', `Copied: ${selectedRunId}`);
   };
 
+  const handleExport = async () => {
+    if (!selectedRunId) return;
+    try {
+      await exportRunNdjson(selectedRunId);
+      addToast('success', 'Export downloaded');
+    } catch {
+      addToast('error', 'Export failed');
+    }
+  };
+
+  const sidebarSetView = useCallback((v: View) => {
+    if (v === 'list') goList(runFilter);
+    else setView(v);
+  }, [goList, runFilter, setView]);
+
   return (
-    <div className="app">
+    <AppShell variant="app">
+      <div className="app">
       <Sidebar
         view={view}
-        setView={(v) => { setView(v); setActiveNav(v); if (v !== 'detail') setSelectedRunId(null); }}
+        setView={sidebarSetView}
         runFilter={runFilter}
-        setRunFilter={setRunFilter}
+        setRunFilter={(f) => goList(f)}
         search={search}
         setSearch={setSearch}
-        onWorkflowFilter={handleWorkflowFilter}
+        searchPlaceholder={
+          view === 'workflows' ? 'Search workflows…' :
+          view === 'agents' ? 'Search agents…' :
+          'Search executions…'
+        }
         onShowKeyboard={() => setShowKb(true)}
         activeNav={activeNav}
-        runs={runs}
+        runCount={runsTotal}
+        totalRuns={runsTotal}
+        failedCount={counts.failed}
+        successCount={counts.success}
+        workflowCount={metrics?.workflows.total ?? workflowsTotal}
+        agentCount={metrics?.agents.total ?? agentsTotal}
         userEmail={user?.email}
         userRole={user?.role}
         onLogout={user ? logout : undefined}
         onUsers={goUsers}
+        onWorkspaceSwitch={() => setRefreshKey((k) => k + 1)}
       />
 
       <div className="main">
         <Topbar
           breadcrumbs={breadcrumbs}
           onShowKeyboard={view !== 'detail' ? () => setShowKb(true) : undefined}
-          onRefresh={view === 'monitor' || view === 'list' ? handleRefresh : undefined}
+          onRefresh={view !== 'detail' ? handleRefresh : undefined}
           onBack={view === 'detail' ? handleBack : undefined}
-          backLabel={detailSource === 'monitor' ? 'Monitor' : 'Runs'}
+          backLabel={detailSource === 'monitor' ? 'Overview' : 'Executions'}
           onCopyId={view === 'detail' ? copyId : undefined}
+          onExport={view === 'detail' ? handleExport : undefined}
+          detailSource={detailSource}
         />
         <main className="content">
           {view === 'monitor' && (
-            <MonitorView runs={runs} loading={loading} error={error} onRunSelect={(id) => handleRunSelect(id, 'monitor')} />
+            <MonitorView
+              metrics={metrics}
+              workflows={topWorkflows}
+              workflowsTotal={workflowsTotal}
+              wfHealth={wfHealth}
+              wfSort={wfSort}
+              onWfHealthChange={setWfHealth}
+              onWfSortChange={setWfSort}
+              recentFailures={recentFailures}
+              loading={metricsLoading || wfLoading}
+              error={metricsError ?? wfError}
+              onRunSelect={(id) => handleRunSelect(id, 'monitor')}
+              onWorkflowSelect={handleWorkflowSelect}
+              onViewAllWorkflows={goWorkflows}
+              onViewExecutions={(f) => goList(f ?? 'all')}
+              onConnect={goConnect}
+            />
+          )}
+          {view === 'workflows' && (
+            <WorkflowsView
+              workflows={wfList}
+              total={wfListTotal}
+              loading={wfListLoading}
+              error={wfListError}
+              search={search}
+              health={wfHealth}
+              sort={wfSort}
+              page={wfPage}
+              onSearchChange={setSearch}
+              onHealthChange={setWfHealth}
+              onSortChange={setWfSort}
+              onPageChange={setWfPage}
+              onWorkflowSelect={handleWorkflowSelect}
+              onRunSelect={(id) => handleRunSelect(id, 'list')}
+            />
+          )}
+          {view === 'agents' && (
+            <AgentsView
+              agents={agents}
+              total={agentsTotal}
+              loading={agentsLoading}
+              error={agentsError}
+              search={search}
+              page={agentPage}
+              onSearchChange={setSearch}
+              onPageChange={setAgentPage}
+              onWorkflowSelect={handleWorkflowSelect}
+            />
           )}
           {view === 'list' && (
-            <RunsListView runs={runs} loading={loading} error={error} filter={runFilter} search={search} onRunSelect={(id) => handleRunSelect(id, 'list')} onFilterChange={(f) => { setRunFilter(f); setActiveNav(f === 'failed' ? 'na-fail' : f === 'success' ? 'na-ok' : 'na-all'); }} />
+            <RunsListView
+              runs={runs}
+              totalRuns={runsTotal}
+              counts={counts}
+              loading={runsLoading}
+              error={runsError}
+              filter={runFilter}
+              search={search}
+              workflowFilter={workflowFilter}
+              page={execPage}
+              onPageChange={setExecPage}
+              onRunSelect={(id) => handleRunSelect(id, 'list')}
+              onFilterChange={(f) => goList(f)}
+              onClearWorkflowFilter={handleClearWorkflowFilter}
+            />
           )}
           {view === 'detail' && selectedRunId && (
-            <RunDetailView runId={selectedRunId} tab={detailTab} onTabChange={setDetailTab} />
+            <RunDetailView runId={selectedRunId} tab={detailTab} onTabChange={setDetailTab} run={selectedRun} loading={detailLoading} error={detailError} />
           )}
           {view === 'connect' && <ConnectView />}
           {view === 'settings' && <SettingsView onToast={addToast} />}
@@ -178,17 +429,32 @@ function AuthenticatedApp() {
         <ToastContainer toasts={toasts} onDismiss={dismiss} />
       </div>
       <KeyboardOverlay open={showKb} onClose={() => setShowKb(false)} />
-    </div>
+      <FirstTimeOnboarding
+        open={showOnboarding}
+        variant={onboardingVariant}
+        userName={user?.name ?? user?.email ?? 'there'}
+        isAdmin={user?.role === 'admin'}
+        onDismiss={dismissOnboarding}
+        onGoToSettings={onboardingGoSettings}
+        onGoToConnect={onboardingGoConnect}
+      />
+      </div>
+    </AppShell>
   );
 }
 
-/** Self-hosted operator UI — only mounted at /app */
 function OperatorApp() {
   const { user, loading: authLoading, authScreen, inviteToken, setAuthScreen } = useAuth();
   const authenticated = Boolean(user) || hasApiCredentials();
 
   if (authLoading) {
-    return <div className="auth-page"><div style={{ color: 'var(--mu)' }}>Loading…</div></div>;
+    return (
+      <AppShell variant="auth">
+        <div className="auth-page">
+          <div style={{ color: 'var(--muL)' }}>Loading…</div>
+        </div>
+      </AppShell>
+    );
   }
 
   if (!authenticated) {

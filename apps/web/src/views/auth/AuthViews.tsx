@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchInvitePreview } from '../../api/auth';
 import { BlamrLogo } from '../../components/BlamrLogo';
+import { AppShell } from '../../components/AppShell';
 
 function AuthShell({
   title,
@@ -15,7 +16,7 @@ function AuthShell({
   onBack?: () => void;
 }) {
   return (
-    <div className="auth-page">
+    <AppShell variant="auth" className="auth-page">
       <div className="auth-card">
         {onBack && (
           <button type="button" className="auth-back" onClick={onBack}>
@@ -27,7 +28,7 @@ function AuthShell({
         {subtitle && <p className="auth-subtitle">{subtitle}</p>}
         {children}
       </div>
-    </div>
+    </AppShell>
   );
 }
 

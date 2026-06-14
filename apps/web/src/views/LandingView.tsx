@@ -1,9 +1,35 @@
 import React from 'react';
 import { BlamrLogo } from '../components/BlamrLogo';
+import { AppShell } from '../components/AppShell';
 import './landing.css';
 
 const GITHUB = 'https://github.com/prithvirajualluri/blamr';
-const DOCS = 'https://github.com/prithvirajualluri/blamr/blob/main/docs/INSTALL.md';
+const DOCS = '/docs.html';
+const CAUSAL_MONITORING = '/causal-monitoring.html';
+
+const HOW_IT_WORKS = [
+  {
+    step: 'STEP 01',
+    title: 'Instrument handoffs',
+    body: 'SDK, MCP proxy, or framework adapter emits CausalEdges at runtime — not reconstructed from logs later.',
+  },
+  {
+    step: 'STEP 02',
+    title: 'Build causal graph',
+    body: 'Ingest stores edges; workers compute semantic drift, Shapley blame scores, and confidence gates.',
+  },
+  {
+    step: 'STEP 03',
+    title: 'Attribute blame',
+    body: 'Backward propagation ranks which agent caused the failure — with confidence decay and intent drift visible per hop.',
+  },
+];
+
+const SIGNALS = [
+  { label: 'Confidence', value: '0.91 → 0.58', desc: 'Inflation across hops' },
+  { label: 'Intent Δ', value: '−0.24', desc: 'Goal drift from original query' },
+  { label: 'Influence', value: '0.89', desc: 'Causal weight at misroute hop' },
+];
 
 const STATS = [
   { value: '88%', label: 'of AI agents fail in production', accent: 're' as const },
@@ -135,21 +161,27 @@ export function LandingView() {
   };
 
   return (
+    <AppShell variant="landing">
     <div className="landing">
       <header className="landing-nav">
+        <div className="landing-nav-inner">
         <button type="button" className="landing-nav-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
           <BlamrLogo variant="full" className="logo-mark" />
         </button>
         <nav className="landing-nav-links">
+          <a href="#how-it-works" className="hide-sm" onClick={(e) => { e.preventDefault(); scrollTo('how-it-works'); }}>How it works</a>
           <a href="#philosophy" className="hide-sm" onClick={(e) => { e.preventDefault(); scrollTo('philosophy'); }}>Philosophy</a>
           <a href="#examples" className="hide-sm" onClick={(e) => { e.preventDefault(); scrollTo('examples'); }}>Examples</a>
           <a href="#compare" className="hide-sm" onClick={(e) => { e.preventDefault(); scrollTo('compare'); }}>Compare</a>
           <a href="#deploy" className="hide-sm" onClick={(e) => { e.preventDefault(); scrollTo('deploy'); }}>Deploy</a>
-          <a href={DOCS} target="_blank" rel="noreferrer">Docs</a>
-          <a className="landing-btn landing-btn-primary" href={GITHUB} target="_blank" rel="noreferrer">
+          <a href={DOCS} className="hide-sm">Docs</a>
+          <a href={CAUSAL_MONITORING} className="hide-sm">Causal monitoring</a>
+          <a className="landing-btn landing-btn-primary" href="/app">Open console</a>
+          <a className="landing-btn landing-btn-ghost" href={GITHUB} target="_blank" rel="noreferrer">
             GitHub
           </a>
         </nav>
+        </div>
       </header>
 
       <section className="landing-hero">
@@ -164,9 +196,12 @@ export function LandingView() {
           <strong>which agent caused the failure — and why</strong>. Not observability. Causal intelligence.
         </p>
         <div className="landing-cta-row">
-          <a className="landing-btn landing-btn-primary" href={DOCS} target="_blank" rel="noreferrer">
+          <a className="landing-btn landing-btn-primary" href={DOCS}>
             Install &amp; quick start
           </a>
+          <button type="button" className="landing-btn landing-btn-ghost" onClick={() => scrollTo('how-it-works')}>
+            How it works
+          </button>
           <button type="button" className="landing-btn landing-btn-ghost" onClick={() => scrollTo('examples')}>
             See failure examples
           </button>
@@ -184,7 +219,35 @@ export function LandingView() {
         </div>
       </section>
 
-      <section id="philosophy" className="landing-section alt">
+      <section id="how-it-works" className="landing-section alt">
+        <div className="landing-section-hdr">
+          <h2>How blamr works</h2>
+          <p>
+            Every agent handoff emits a CausalEdge — confidence, intent drift, I/O previews. Workers build a causal graph
+            and rank who actually caused the failure.
+          </p>
+        </div>
+        <div className="landing-how-grid">
+          {HOW_IT_WORKS.map((s) => (
+            <div key={s.step} className="landing-how-step">
+              <div className="landing-how-num">{s.step}</div>
+              <h4>{s.title}</h4>
+              <p>{s.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="landing-signal-demo">
+          {SIGNALS.map((s) => (
+            <div key={s.label} className="landing-signal-card">
+              <div className="landing-signal-lbl">{s.label}</div>
+              <div className="landing-signal-val">{s.value}</div>
+              <div className="landing-signal-desc">{s.desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="philosophy" className="landing-section">
         <div className="landing-section-hdr">
           <h2>Flight recorder vs crash investigator</h2>
           <p>
@@ -212,7 +275,7 @@ export function LandingView() {
         </div>
       </section>
 
-      <section className="landing-section">
+      <section className="landing-section alt">
         <div className="landing-section-hdr">
           <h2>The structural gap</h2>
           <p>
@@ -233,7 +296,7 @@ export function LandingView() {
         </div>
       </section>
 
-      <section id="examples" className="landing-section alt">
+      <section id="examples" className="landing-section">
         <div className="landing-section-hdr">
           <h2>Five production failure patterns</h2>
           <p>
@@ -271,7 +334,7 @@ export function LandingView() {
         </div>
       </section>
 
-      <section id="compare" className="landing-section">
+      <section id="compare" className="landing-section alt">
         <div className="landing-section-hdr">
           <h2>Capability comparison</h2>
           <p>What existing tools record vs what blamr attributes — at a glance.</p>
@@ -302,7 +365,7 @@ export function LandingView() {
         </div>
       </section>
 
-      <section className="landing-section alt">
+      <section className="landing-section">
         <div className="landing-section-hdr">
           <h2>Why now</h2>
           <p>Four independent forcing functions aligned in 2026 — production pain, protocol standardization, regulation, and validated research.</p>
@@ -318,7 +381,7 @@ export function LandingView() {
         </div>
       </section>
 
-      <section id="deploy" className="landing-section">
+      <section id="deploy" className="landing-section alt">
         <div className="landing-section-hdr">
           <h2>Self-hosted by default</h2>
           <p>Run the full stack on your infrastructure. Docker Compose, Helm, Ollama-only LLM enrichment — no cloud LLM required.</p>
@@ -346,7 +409,10 @@ export function LandingView() {
           Trace handoffs, attribute blame, explain failures — before they reach production users.
         </p>
         <div className="landing-cta-row">
-          <a className="landing-btn landing-btn-primary" href={DOCS} target="_blank" rel="noreferrer">
+          <a className="landing-btn landing-btn-ghost" href={CAUSAL_MONITORING}>
+            How monitoring works
+          </a>
+          <a className="landing-btn landing-btn-primary" href={DOCS}>
             Read the install guide
           </a>
           <a className="landing-btn landing-btn-ghost" href={GITHUB} target="_blank" rel="noreferrer">
@@ -355,7 +421,8 @@ export function LandingView() {
         </div>
         <div className="landing-footer-links">
           <a href={GITHUB} target="_blank" rel="noreferrer">GitHub</a>
-          <a href={DOCS} target="_blank" rel="noreferrer">Install docs</a>
+          <a href={DOCS}>Install docs</a>
+          <a href={CAUSAL_MONITORING}>Causal monitoring</a>
           <a href="#philosophy" onClick={(e) => { e.preventDefault(); scrollTo('philosophy'); }}>Philosophy</a>
           <a href="#deploy" onClick={(e) => { e.preventDefault(); scrollTo('deploy'); }}>Self-host</a>
         </div>
@@ -365,5 +432,6 @@ export function LandingView() {
         </p>
       </footer>
     </div>
+    </AppShell>
   );
 }

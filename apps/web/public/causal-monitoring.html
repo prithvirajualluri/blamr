@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="assets/blamr_favicon.svg" />
+  <meta name="theme-color" content="#070D1A" />
+  <title>Causal monitoring — blamr</title>
+  <meta name="description" content="How blamr causal monitoring works — pipeline, blame attribution, confidence gates, and dashboard business logic." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="layout.css" />
+  <link rel="stylesheet" href="docs.css" />
+</head>
+<body>
+  <div class="landing">
+    <header class="landing-nav">
+      <div class="landing-nav-inner">
+        <a class="landing-nav-brand" href="/">
+          <img src="assets/blamr_logo.svg" alt="blamr" width="136" height="30" />
+        </a>
+        <nav class="landing-nav-links">
+          <a href="/">Home</a>
+          <a href="/docs.html">Install</a>
+          <a href="/causal-monitoring.html" class="active" style="color:var(--cyL)">Causal monitoring</a>
+          <a href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="docs-page-banner" id="overview">
+      <h1>Causal monitoring</h1>
+      <p>How blamr measures every agent handoff, scores runs, attributes blame, and turns telemetry into operator signals on the dashboard.</p>
+    </div>
+
+    <div class="docs-layout">
+      <aside class="docs-sidebar">
+        <h2>On this page</h2>
+        <nav>
+          <a href="#overview">Overview</a>
+          <a href="#what-is">What it is</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#causaledge">CausalEdge</a>
+          <a href="#run-lifecycle">Run lifecycle</a>
+          <a href="#enrichment">Enrichment</a>
+          <a href="#accuracy">Accuracy score</a>
+          <a href="#blame">Blame attribution</a>
+          <a href="#dashboard">Dashboard logic</a>
+          <a href="#events">Event topics</a>
+          <a href="#config">Configuration</a>
+          <a href="#operators">Operator mental model</a>
+        </nav>
+        <div class="toc-group">
+          <h2>More docs</h2>
+          <a href="/docs.html">Installation guide</a>
+          <a href="https://github.com/prithvirajualluri/blamr/blob/main/docs/CONCEPTS.md" target="_blank" rel="noreferrer">Concepts (GitHub)</a>
+        </div>
+      </aside>
+
+      <main class="docs-main">
+
+        <section class="doc-section" id="what-is">
+          <h2>What causal monitoring is</h2>
+          <p>Traditional tracing answers: <em>what happened, in what order, and how long did it take?</em></p>
+          <p>Causal monitoring answers: <strong>which agent introduced the fault, and why did the workflow fail?</strong></p>
+          <p>blamr records a <strong>CausalEdge</strong> at every agent handoff — not just latency and tokens:</p>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Signal</th><th>Business meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>confidence_in</code> / <code>confidence_out</code></td><td>How certain the agent was going in vs going out</td></tr>
+                <tr><td><code>intent_delta</code></td><td>Whether the hop preserved the workflow goal (−1 = total drift, 0 = preserved)</td></tr>
+                <tr><td><code>influence_score</code></td><td>How much downstream behavior this hop can affect</td></tr>
+                <tr><td>I/O previews</td><td>Truncated input/output for trace UI, embeddings, and LLM explanations</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Those signals form a <strong>directed causal graph</strong> per run. When the run completes, workers walk that graph backward and assign <strong>fault-weighted blame percentages</strong> to each agent.</p>
+        </section>
+
+        <section class="doc-section" id="pipeline">
+          <h2>End-to-end pipeline</h2>
+          <div class="code-block">
+            <div class="code-block-header"><span>Data flow</span></div>
+            <pre>Agents ──CausalEdge/hop──► Ingest (:3001)
+                              │
+                              ├──► Kafka edges.raw ──► ClickHouse writer ──► causal_edges
+                              │
+                              └──► POST runs/complete ──► runs.completed
+                                        │
+                                        ▼ (settle ~2s)
+                                   blame.needed ──► Blame processor
+                                        │
+                                        ├──► Postgres (workflow_runs, blame_reports)
+                                        └──► blame.completed ──► Webhooks / UI
+
+Dashboard (:8080) ◄── API (:3000) ◄── Postgres</pre>
+          </div>
+          <ol style="color:var(--muL);line-height:1.75;padding-left:1.25rem;font-size:14px;">
+            <li><strong>Instrument</strong> — SDK, MCP proxy, or adapter emits one CausalEdge per hop.</li>
+            <li><strong>Ingest</strong> — Validates API key, Merkle-hashes edges, publishes to <code>edges.raw</code>. Returns <code>202</code> immediately.</li>
+            <li><strong>Edge writer</strong> — Batches edges into ClickHouse; optional semantic drift on flush.</li>
+            <li><strong>Complete run</strong> — Agent calls <code>POST /v1/runs/:run_id/complete</code> with success or failed.</li>
+            <li><strong>Run aggregator</strong> — Waits <code>BLAMR_SEMANTIC_SETTLE_MS</code> (default 2s), then publishes <code>blame.needed</code>.</li>
+            <li><strong>Blame processor</strong> — Enriches signals, evaluates confidence gate, computes blame, persists results.</li>
+            <li><strong>Dashboard</strong> — Renders causal graph, trace, cost, and blame/attribution tabs.</li>
+          </ol>
+          <div class="doc-callout">
+            <strong>Important:</strong> Agents talk to <strong>ingest</strong> (<code>:3001/v1</code>). The dashboard API (<code>:3000</code>) is for operators only.
+          </div>
+        </section>
+
+        <section class="doc-section" id="causaledge">
+          <h2>The unit of observation: CausalEdge</h2>
+          <p>Each edge is one <strong>handoff</strong> in a multi-agent workflow, ordered by <code>hop_index</code> and linked via <code>prev_hash</code> → <code>edge_hash</code> (SHA-256 audit chain).</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>Handoff</span></div>
+            <pre>Agent A  ──edge──►  Agent B
+  hop_index: 0
+  confidence_in:   what B received with
+  confidence_out:  what B emitted
+  intent_delta:    goal preservation on this hop
+  influence_score: downstream causal weight</pre>
+          </div>
+          <h3>Agent-side signal computation</h3>
+          <p>The TypeScript SDK (<code>@blamr/sdk</code>) computes hop signals via <code>computeHopSignals()</code>:</p>
+          <ul style="color:var(--muL);line-height:1.75;padding-left:1.25rem;font-size:14px;">
+            <li><strong>Intent delta</strong> — from domain alignment or retrieval relevance (aligned ≈ −0.02; weak retrieval −0.15 to −0.35).</li>
+            <li><strong>Confidence out</strong> — composite of lexical confidence, structured JSON fields, tool scores, alignment ceiling, and upstream cap.</li>
+          </ul>
+          <p>Agents emit honest I/O + scores; the platform derives causal primitives — no manual blame guessing required.</p>
+        </section>
+
+        <section class="doc-section" id="run-lifecycle">
+          <h2>Run lifecycle and status</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Phase</th><th>Status</th><th>Dashboard</th></tr></thead>
+              <tbody>
+                <tr><td>Hops in flight</td><td><em>no row yet</em></td><td>Edges stream to ClickHouse</td></tr>
+                <tr><td><code>completeRun()</code> called</td><td>processing</td><td>Poll until blame ready</td></tr>
+                <tr><td>Blame processor finishes</td><td>success or failed</td><td>Full run detail available</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Business failure vs confidence gate</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Source</th><th>Who decides</th><th>Example</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Business rule</strong></td><td>Agent <code>completeRun({ businessFailed: true })</code></td><td>Tool threw, validation failed</td></tr>
+                <tr><td><strong>Confidence gate</strong></td><td>Workers after enrichment</td><td>Final hop 62% &lt; 70% threshold</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>If the agent reports success but the gate fails, workers <strong>upgrade the run to failed</strong> and set <code>error_summary</code> from the gate reason.</p>
+          <h3>Confidence gate modes</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Mode</th><th>Pass condition</th><th>Use when</th></tr></thead>
+              <tbody>
+                <tr><td><code>final</code> (default)</td><td>Last hop <code>confidence_out</code> ≥ accept level</td><td>End-to-end output quality matters</td></tr>
+                <tr><td><code>min</code></td><td>Every hop ≥ accept level</td><td>No weak link in the chain</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Default accept level: <strong>0.70</strong>. Configure in SDK or <strong>Settings → Workspace → Workflow profiles</strong>.</p>
+        </section>
+
+        <section class="doc-section" id="enrichment">
+          <h2>Post-run enrichment</h2>
+          <h3>Semantic drift (<code>BLAMR_SEMANTIC_DRIFT=true</code>)</h3>
+          <p>Embeds I/O previews via local Ollama. Compares tool input vs output and run goal vs downstream output. In telemetry-first mode (default):</p>
+          <ul style="color:var(--muL);line-height:1.75;padding-left:1.25rem;font-size:14px;">
+            <li><code>intent_delta = min(agent_reported, semantic_value)</code></li>
+            <li><code>confidence_out = min(reported, semantic_similarity_ceiling)</code></li>
+          </ul>
+          <h3>ML drift + ranker (<code>BLAMR_ML_ENABLED=true</code>)</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Drift type</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>domain_mismatch</code></td><td>Output belongs to wrong domain</td></tr>
+                <tr><td><code>retrieval_miss</code></td><td>KB/tool returned irrelevant data</td></tr>
+                <tr><td><code>severity_underrate</code></td><td>Incident severity too low</td></tr>
+                <tr><td><code>confidence_inflation</code></td><td>Overconfident despite downstream fault</td></tr>
+                <tr><td><code>propagation</code></td><td>Echoing an upstream error</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="doc-section" id="accuracy">
+          <h2>Accuracy score</h2>
+          <p>Each completed run gets <code>accuracy_score</code> (0–1) for workflow health bands and Overview KPIs.</p>
+          <div class="code-block">
+            <div class="code-block-header"><span>Logic</span></div>
+            <pre>if no edges:
+  success → 0.9 ; failed → 0.4
+else:
+  base = last_hop.confidence_out
+  success → clamp(base, 0.65 … 0.99)
+  failed  → clamp(base × 0.55, 0.25 … 0.65)</pre>
+          </div>
+          <p>Accuracy reflects <strong>final-hop confidence tempered by outcome</strong> — failed runs score lower even when last-hop confidence was high.</p>
+        </section>
+
+        <section class="doc-section" id="blame">
+          <h2>Blame attribution</h2>
+          <p>Blame answers: <em>of the total fault in this run, what fraction belongs to each agent?</em></p>
+          <h3>Fault signals per hop</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Signal</th><th>Formula</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td>Intent harm</td><td><code>max(0, −intent_delta)</code></td><td>Goal drift on this hop</td></tr>
+                <tr><td>Confidence drop</td><td><code>max(0, confidence_in − confidence_out)</code></td><td>Agent lost certainty</td></tr>
+                <tr><td>Inflation</td><td><code>max(0, confidence_out − confidence_in − 0.15)</code></td><td>Overconfident despite problems</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Blame weights</h3>
+          <div class="code-block">
+            <div class="code-block-header"><span>Per hop (from_agent)</span></div>
+            <pre>localFault = intentHarm × 3 + confDrop × 2 + inflation × 2
+
+if run failed:
+  weight = influence_score × (localFault + 0.05)
+else:
+  weight = influence_score × 0.5   // influence, not fault
+
+Normalize per agent → percentages (sum = 100%)</pre>
+          </div>
+          <p><strong>Design principle:</strong> blame follows <strong>where fault was introduced</strong>, not hop order alone or token count.</p>
+          <h3>Failed vs successful runs</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Outcome</th><th>Dashboard tab</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td>Failed</td><td><strong>Blame</strong></td><td>Root cause agent + fault % + reasons</td></tr>
+                <tr><td>Success</td><td><strong>Attribution</strong></td><td>Influence distribution, not fault assignment</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>When ML is enabled on failed runs: <code>fused_pct = (1 − α) × rule_pct + α × ml_pct</code> (default α = 0.55). Optional LLM rewrites reasons citing trace I/O.</p>
+        </section>
+
+        <section class="doc-section" id="dashboard">
+          <h2>Dashboard business logic</h2>
+          <h3>Workflow health bands</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Band</th><th>Avg accuracy</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Critical</strong></td><td>&lt; 60%</td><td>Investigate immediately</td></tr>
+                <tr><td><strong>Warning</strong></td><td>60% – 74%</td><td>Review recent failures</td></tr>
+                <tr><td><strong>Fair</strong></td><td>75% – 89%</td><td>Acceptable, not excellent</td></tr>
+                <tr><td><strong>Healthy</strong></td><td>≥ 90%</td><td>Within target</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Agent connection status</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Status</th><th>Condition</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Live</strong></td><td>seen ≤ 15 min ago</td><td>Actively emitting edges</td></tr>
+                <tr><td><strong>Idle</strong></td><td>15 min – 7 days</td><td>Seen recently, quiet now</td></tr>
+                <tr><td><strong>Offline</strong></td><td>&gt; 7 days or never</td><td>No recent telemetry</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Run detail tabs</h3>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Tab</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td>Graph</td><td>Causal topology + confidence + influence</td></tr>
+                <tr><td>Trace</td><td>Hop-by-hop I/O, latency, tokens</td></tr>
+                <tr><td>Cost</td><td>Token and USD breakdown</td></tr>
+                <tr><td>Blame / Attribution</td><td>Root cause or influence ranking</td></tr>
+                <tr><td>Timeline</td><td>Chronological replay</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="doc-section" id="events">
+          <h2>Event topics</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Topic</th><th>Producer</th><th>Consumer</th></tr></thead>
+              <tbody>
+                <tr><td><code>edges.raw</code></td><td>Ingest</td><td>ClickHouse writer</td></tr>
+                <tr><td><code>runs.completed</code></td><td>Ingest</td><td>Run aggregator</td></tr>
+                <tr><td><code>blame.needed</code></td><td>Run aggregator</td><td>Blame processor</td></tr>
+                <tr><td><code>blame.completed</code></td><td>Blame processor</td><td>Webhooks</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="doc-section" id="config">
+          <h2>Configuration map</h2>
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Goal</th><th>Where</th></tr></thead>
+              <tbody>
+                <tr><td>Per-workflow confidence threshold</td><td>SDK <code>workflowConfig</code> or Settings → Workflow profiles</td></tr>
+                <tr><td>Semantic drift on/off</td><td><code>BLAMR_SEMANTIC_DRIFT</code> (workers)</td></tr>
+                <tr><td>ML blame fusion</td><td><code>BLAMR_ML_ENABLED</code>, <code>BLAMR_ML_FUSION_ALPHA</code></td></tr>
+                <tr><td>LLM blame narratives</td><td><code>BLAMR_LLM_BLAME_REASON</code></td></tr>
+                <tr><td>Ingest endpoint</td><td><code>BLAMR_ENDPOINT=http://host:3001/v1</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Full markdown reference: <a href="https://github.com/prithvirajualluri/blamr/blob/main/docs/CAUSAL_MONITORING.md" target="_blank" rel="noreferrer" style="color:var(--cyL)">docs/CAUSAL_MONITORING.md</a></p>
+        </section>
+
+        <section class="doc-section" id="operators">
+          <h2>Mental model for operators</h2>
+          <ol style="color:var(--muL);line-height:1.75;padding-left:1.25rem;font-size:14px;">
+            <li><strong>Instrument every handoff</strong> — no edge means invisible to blame.</li>
+            <li><strong>Complete every run</strong> — without <code>completeRun()</code>, blame never fires.</li>
+            <li><strong>Failed ≠ one bad agent</strong> — blame % shows contribution, including propagation.</li>
+            <li><strong>Success runs still have signal</strong> — attribution + inflation flags per hop.</li>
+            <li><strong>Health bands lag reality</strong> — they aggregate historical accuracy.</li>
+          </ol>
+        </section>
+
+      </main>
+    </div>
+
+    <footer class="landing-footer">
+      <img class="landing-footer-logo" src="assets/blamr_logo.svg" alt="blamr" width="182" height="40" />
+      <div class="landing-footer-links">
+        <a href="/">Home</a>
+        <a href="/docs.html">Installation</a>
+        <a href="/causal-monitoring.html">Causal monitoring</a>
+        <a href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+    </footer>
+  </div>
+  <script src="docs.js"></script>
+</body>
+</html>

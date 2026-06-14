@@ -1,11 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { View, RunFilter, RunSummary } from '../types';
-import { groupRunsByWorkflow } from '../types';
+import React, { useEffect, useState } from 'react';
+import type { View, RunFilter } from '../types';
+import { formatScaleCount } from '../utils/registry';
 import type { UserRole } from '@blamr/types';
-import { getWorkflowCounts } from '../utils/runs';
-import { BlamrStatusDot } from './BlamrStatusBadge';
 import { BlamrLogo } from './BlamrLogo';
-import { IconSearch, IconList, IconAlert, IconCheck, IconLink, IconSettings } from './icons';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import {
+  IconSearch,
+  IconList,
+  IconAlert,
+  IconCheck,
+  IconLink,
+  IconSettings,
+} from './icons';
 
 interface SidebarProps {
   view: View;
@@ -14,14 +20,20 @@ interface SidebarProps {
   setRunFilter: (f: RunFilter) => void;
   search: string;
   setSearch: (s: string) => void;
-  onWorkflowFilter: (workflow: string) => void;
+  searchPlaceholder?: string;
   onShowKeyboard: () => void;
   activeNav?: string;
-  runs: RunSummary[];
+  runCount: number;
+  totalRuns: number;
+  failedCount: number;
+  successCount: number;
+  workflowCount: number;
+  agentCount: number;
   userEmail?: string;
   userRole?: UserRole;
   onLogout?: () => void;
   onUsers?: () => void;
+  onWorkspaceSwitch?: () => void;
 }
 
 export function Sidebar({
@@ -31,14 +43,20 @@ export function Sidebar({
   setRunFilter,
   search,
   setSearch,
-  onWorkflowFilter,
+  searchPlaceholder = 'Search executions…',
   onShowKeyboard,
   activeNav,
-  runs,
+  runCount,
+  totalRuns,
+  workflowCount,
+  agentCount,
+  failedCount,
+  successCount,
   userEmail,
   userRole,
   onLogout,
   onUsers,
+  onWorkspaceSwitch,
 }: SidebarProps) {
   const [time, setTime] = useState(new Date());
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -59,22 +77,21 @@ export function Sidebar({
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  const failedCount = runs.filter((r) => r.status === 'failed').length;
-  const successCount = runs.filter((r) => r.status === 'success').length;
-  const wfCounts = getWorkflowCounts(runs);
-  const wfStatus = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof groupRunsByWorkflow>[number]['blamrStatus']>();
-    for (const wf of groupRunsByWorkflow(runs)) m.set(wf.id, wf.blamrStatus);
-    return m;
-  }, [runs]);
-
-  const navClass = (id: string) => `ni${activeNav === id || (activeNav === undefined && view === id) ? ' on' : ''}`;
+  const navClass = (id: string) =>
+    `ni${activeNav === id || (activeNav === undefined && view === id) ? ' on' : ''}`;
 
   const clk = [
     time.getHours().toString().padStart(2, '0'),
     time.getMinutes().toString().padStart(2, '0'),
     time.getSeconds().toString().padStart(2, '0'),
   ].join(':');
+
+  const execLabel = totalRuns > runCount ? formatScaleCount(totalRuns) : String(runCount);
+
+  const goExecutions = (filter?: RunFilter) => {
+    setView('list');
+    if (filter) setRunFilter(filter);
+  };
 
   return (
     <aside className="sidebar">
@@ -88,63 +105,83 @@ export function Sidebar({
         <input
           ref={searchRef}
           type="text"
-          placeholder="Search workflows, runs..."
+          placeholder={searchPlaceholder}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
-            if (view !== 'list' && view !== 'detail') setView('list');
+            if (view !== 'list' && view !== 'detail' && view !== 'workflows' && view !== 'agents') {
+              setView('list');
+            }
           }}
         />
       </div>
 
-      <div className="sec-lbl">Platform</div>
-      <button type="button" className={navClass('monitor')} onClick={() => setView('monitor')}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-        Live monitor
-        <span className="pulse-dot" style={{ width: 5, height: 5, marginLeft: 'auto' }} />
-      </button>
-
-      <div className="sec-lbl" style={{ marginTop: 4 }}>Runs</div>
-      <button type="button" className={navClass('na-all')} onClick={() => { setView('list'); setRunFilter('all'); }}>
-        <IconList /> All runs <span className="ni-cnt">{runs.length}</span>
-      </button>
-      <button type="button" className={navClass('na-fail')} onClick={() => { setView('list'); setRunFilter('failed'); }}>
-        <IconAlert /> Failed {failedCount > 0 && <span className="ni-badge">{failedCount}</span>}
-      </button>
-      <button type="button" className={navClass('na-ok')} onClick={() => { setView('list'); setRunFilter('success'); }}>
-        <IconCheck /> Success <span className="ni-cnt">{successCount}</span>
-      </button>
-
-      {Object.keys(wfCounts).length > 0 && (
-        <>
-          <div className="sec-lbl" style={{ marginTop: 4 }}>Workflows</div>
-          {Object.keys(wfCounts).map((w) => (
-            <button key={w} type="button" className="ni" onClick={() => onWorkflowFilter(w)}>
-              <BlamrStatusDot status={wfStatus.get(w) ?? 'offline'} />
-              <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w}</span>
-              <span className="ni-cnt">{wfCounts[w]}</span>
-            </button>
-          ))}
-        </>
-      )}
-
-      <div className="sec-lbl" style={{ marginTop: 4 }}>Tools</div>
-      <button type="button" className={navClass('connect')} onClick={() => setView('connect')}><IconLink /> Connect agents</button>
-      <button type="button" className={navClass('settings')} onClick={() => setView('settings')}><IconSettings /> API &amp; keys</button>
-      {onUsers && (
-        <button type="button" className={navClass('users')} onClick={onUsers}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-          Team
+      <div className="sidebar-scroll">
+        <div className="sec-lbl">Observe</div>
+        <button type="button" className={navClass('monitor')} onClick={() => setView('monitor')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          Overview
         </button>
-      )}
+        <button type="button" className={navClass('workflows')} onClick={() => setView('workflows')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+          Workflows
+          <span className="ni-cnt">{formatScaleCount(workflowCount)}</span>
+        </button>
+        <button type="button" className={navClass('agents')} onClick={() => setView('agents')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+          </svg>
+          Agents
+          <span className="ni-cnt">{formatScaleCount(agentCount)}</span>
+        </button>
+
+        <div className="sec-lbl">Executions</div>
+        <button type="button" className={navClass('na-all')} onClick={() => goExecutions('all')}>
+          <IconList /> All runs <span className="ni-cnt">{execLabel}</span>
+        </button>
+        <button type="button" className={navClass('na-fail')} onClick={() => goExecutions('failed')}>
+          <IconAlert /> Failed {failedCount > 0 && <span className="ni-badge">{failedCount}</span>}
+        </button>
+        <button type="button" className={navClass('na-ok')} onClick={() => goExecutions('success')}>
+          <IconCheck /> Success
+        </button>
+
+        <div className="sec-lbl">Configure</div>
+        <button type="button" className={navClass('connect')} onClick={() => setView('connect')}>
+          <IconLink /> Connect agents
+        </button>
+        <button type="button" className={navClass('settings')} onClick={() => setView('settings')}>
+          <IconSettings /> API &amp; keys
+        </button>
+        {onUsers && (
+          <button type="button" className={navClass('users')} onClick={onUsers}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            Team
+          </button>
+        )}
+      </div>
 
       <div className="sb-foot">
+        <WorkspaceSwitcher onSwitched={onWorkspaceSwitch} />
         <div className="sb-foot-brand">blamr.ai</div>
-        <div style={{ fontSize: 11, color: 'var(--mu)', lineHeight: 1.7 }}>
+        <div className="sb-foot-meta">
           {userEmail && (
             <>
-              <span style={{ color: 'var(--wh)' }}>{userEmail}</span>
-              {userRole && <span style={{ marginLeft: 6, color: 'var(--cy)' }}>({userRole})</span>}
+              <span className="sb-foot-user">{userEmail}</span>
+              {userRole && <span className="sb-foot-role">({userRole})</span>}
               <br />
             </>
           )}
@@ -152,12 +189,12 @@ export function Sidebar({
           <br />
           {onLogout && (
             <>
-              <span style={{ cursor: 'pointer', color: 'var(--cy)' }} onClick={onLogout} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onLogout()}>Sign out</span>
+              <button type="button" className="sb-foot-link" onClick={onLogout}>Sign out</button>
               {' · '}
             </>
           )}
-          <span style={{ cursor: 'pointer', color: 'var(--cy)' }} onClick={onShowKeyboard} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onShowKeyboard()}>Shortcuts ?</span>
-          <span id="live-clk" className="mono" style={{ float: 'right' }}>{clk}</span>
+          <button type="button" className="sb-foot-link" onClick={onShowKeyboard}>Shortcuts ?</button>
+          <span className="mono sb-foot-clock">{clk}</span>
         </div>
       </div>
     </aside>

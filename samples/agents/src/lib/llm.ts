@@ -115,8 +115,33 @@ export function hopSignals(
   return computeHopSignals(input);
 }
 
+function stripJsonFence(text: string): string {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+}
+
+/** Repair common LLM JSON mistakes (unquoted keys, trailing commas). */
+function repairJson(text: string): string {
+  let s = stripJsonFence(text);
+  // Half-quoted keys: ,confidence": → ,"confidence":
+  s = s.replace(/([\{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)":/g, '$1"$2":');
+  // Unquoted keys: ,confidence: → ,"confidence":
+  s = s.replace(/([\{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  return s;
+}
+
 export function parseJsonBlock(text: string): Record<string, unknown> {
-  const match = text.match(/\{[\s\S]*\}/);
+  const match = stripJsonFence(text).match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`Expected JSON in model output: ${text.slice(0, 120)}`);
-  return JSON.parse(match[0]) as Record<string, unknown>;
+
+  const raw = match[0];
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return JSON.parse(repairJson(raw)) as Record<string, unknown>;
+  }
 }

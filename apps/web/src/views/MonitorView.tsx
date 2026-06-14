@@ -1,225 +1,267 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React from 'react';
 import { FilterChip } from '../components/ui/FilterChip';
 import { ApiBanner, EmptyState } from '../components/ApiBanner';
-import { BlamrStatusBadge, BlamrStatusDot } from '../components/BlamrStatusBadge';
-import { accCol } from '../utils/format';
+import { BlamrStatusDot } from '../components/BlamrStatusBadge';
+import { Sparkline } from '../components/Sparkline';
+import { accCol, fC, fT } from '../utils/format';
+import { formatDuration } from '../utils/runs';
 import { formatLastSeen } from '../utils/blamr-status';
-import { groupRunsByWorkflow, type HeatmapFilter, type HeatmapSort, type RunSummary, type WorkflowMonitorRow } from '../types';
+import { formatScaleCount } from '../utils/registry';
+import type { PlatformOverview, WorkflowApiRow } from '../api/runs';
+import type { RunSummary } from '../types';
 
 interface MonitorViewProps {
-  runs: RunSummary[];
+  metrics: PlatformOverview | null;
+  workflows: WorkflowApiRow[];
+  workflowsTotal: number;
+  wfHealth: string;
+  wfSort: string;
+  onWfHealthChange: (h: string) => void;
+  onWfSortChange: (s: string) => void;
+  recentFailures: RunSummary[];
   loading: boolean;
   error: string | null;
   onRunSelect: (id: string) => void;
+  onWorkflowSelect: (workflowId: string) => void;
+  onViewAllWorkflows: () => void;
+  onViewExecutions: (filter?: 'failed') => void;
+  onConnect: () => void;
 }
 
-function filterWorkflows(workflows: WorkflowMonitorRow[], filter: HeatmapFilter, sort: HeatmapSort): WorkflowMonitorRow[] {
-  let list = workflows.filter((w) => {
-    if (filter === 'critical') return w.avgAcc < 0.6;
-    if (filter === 'warning') return w.avgAcc >= 0.6 && w.avgAcc < 0.75;
-    if (filter === 'healthy') return w.avgAcc >= 0.9;
-    return true;
-  });
-  list = [...list].sort((a, b) => {
-    if (sort === 'acc') return a.avgAcc - b.avgAcc;
-    if (sort === 'acc-d') return b.avgAcc - a.avgAcc;
-    if (sort === 'blame') return b.totalRuns - a.totalRuns;
-    return b.totalRuns - a.totalRuns;
-  });
-  return list;
-}
+export function MonitorView({
+  metrics,
+  workflows,
+  workflowsTotal,
+  wfHealth,
+  wfSort,
+  onWfHealthChange,
+  onWfSortChange,
+  recentFailures,
+  loading,
+  error,
+  onRunSelect,
+  onWorkflowSelect,
+  onViewAllWorkflows,
+  onViewExecutions,
+  onConnect,
+}: MonitorViewProps) {
+  const m = metrics;
+  const critical = m?.workflows.critical ?? 0;
+  const warning = m?.workflows.warning ?? 0;
+  const fair = m?.workflows.fair ?? 0;
+  const healthy = m?.workflows.healthy ?? 0;
+  const healthyPct = m?.workflows.total
+    ? Math.round(((healthy + fair) / m.workflows.total) * 100)
+    : 100;
+  const successPct = m ? Math.round(m.executions.success_rate * 100) : 0;
+  const failPct = m && m.executions.total
+    ? Math.round((m.executions.failed / m.executions.total) * 100)
+    : 0;
 
-function accColor(v: number): string {
-  return accCol(v);
-}
-
-export function MonitorView({ runs, loading, error, onRunSelect }: MonitorViewProps) {
-  const workflows = useMemo(() => groupRunsByWorkflow(runs), [runs]);
-  const [filter, setFilter] = useState<HeatmapFilter>('all');
-  const [sort, setSort] = useState<HeatmapSort>('acc-d');
-  const [selectedWf, setSelectedWf] = useState<WorkflowMonitorRow | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const filtered = useMemo(() => filterWorkflows(workflows, filter, sort), [workflows, filter, sort]);
-
-  const avgAcc = runs.length ? runs.reduce((a, r) => a + r.accuracy, 0) / runs.length : 0;
-  const critical = workflows.filter((w) => w.avgAcc < 0.6).length;
-  const warning = workflows.filter((w) => w.avgAcc >= 0.6 && w.avgAcc < 0.75).length;
-  const healthyPct = workflows.length ? Math.round(((workflows.length - critical) / workflows.length) * 100) : 100;
-
-  const handleCellClick = useCallback((wf: WorkflowMonitorRow, idx: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (wf.realRuns[idx]) onRunSelect(wf.realRuns[idx]);
-  }, [onRunSelect]);
-
-  if (loading && !runs.length) {
-    return <div className="page-enter" style={{ color: 'var(--muL)', padding: 24 }}>Loading…</div>;
+  if (loading && !m) {
+    return <div className="page-enter view-loading">Loading platform overview…</div>;
   }
 
   return (
     <div className="page-enter">
+      <div className="view-header">
+        <div>
+          <h1 className="view-title">Overview</h1>
+          <p className="view-subtitle">Executions, cost, tokens, latency, and platform health</p>
+        </div>
+      </div>
+
       <ApiBanner error={error} />
 
-      {!runs.length && !loading && (
-        <EmptyState title="No workflow runs yet" subtitle="Connect agents and ingest causal edges to populate the monitor." />
+      {m && m.executions.total === 0 && !loading && (
+        <EmptyState title="No executions yet" subtitle="Connect agents and ingest causal edges to populate the overview." actionLabel="Connect agents →" onAction={onConnect} />
       )}
 
-      {runs.length > 0 && (
+      {m && m.executions.total > 0 && (
         <>
           {critical > 0 && (
-            <div
-              style={{ background: 'var(--reD)', border: '1px solid rgba(220,38,38,.25)', borderLeft: '3px solid var(--re)', borderRadius: 'var(--rad-lg)', padding: '11px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-              onClick={() => setFilter('critical')}
-              role="button"
-              tabIndex={0}
-            >
-              <span style={{ fontSize: 15 }}>⚠</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--reL)' }}>{critical} workflows below 60% accuracy</div>
+            <div className="alert-banner" onClick={() => onWfHealthChange('critical')} role="button" tabIndex={0}>
+              <span className="alert-icon">⚠</span>
+              <div className="alert-text">
+                <strong>{critical} workflows below 60% accuracy</strong>
+                <span>Review blame attribution before failures reach users</span>
               </div>
-              <span style={{ fontSize: 11, color: 'var(--reL)' }}>Filter ›</span>
+              <span className="alert-action">Filter ›</span>
             </div>
           )}
 
-          <div className="kpi-strip">
-            <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => setFilter('all')} role="button" tabIndex={0}>
-              <div className="kpi-lbl">Platform accuracy</div>
-              <div className="kpi-val" style={{ color: accCol(avgAcc) }}>{Math.round(avgAcc * 100)}%</div>
-              <div className="kpi-sub">avg · {workflows.length} workflows</div>
+          <div className="metrics-section-lbl">Volume</div>
+          <div className="kpi-strip kpi-strip-4">
+            <div className="kpi-card kpi-card-click" onClick={() => onViewExecutions()} role="button" tabIndex={0}>
+              <div className="kpi-lbl">Executions</div>
+              <div className="kpi-val c-cyn">{formatScaleCount(m.executions.total)}</div>
+              <div className="kpi-sub">{successPct}% success rate</div>
             </div>
-            <div className="kpi-card" style={{ cursor: 'pointer' }} onClick={() => setFilter('critical')} role="button" tabIndex={0}>
-              <div className="kpi-lbl">Critical (&lt; 60%)</div>
-              <div className="kpi-val c-red">{critical}</div>
-              <div className="kpi-sub">workflows need attention</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-lbl">Total runs</div>
-              <div className="kpi-val c-cyn">{runs.length}</div>
-              <div className="kpi-sub">ingested runs</div>
-            </div>
-            <div className="kpi-card">
+            <div className="kpi-card kpi-card-click" onClick={onViewAllWorkflows} role="button" tabIndex={0}>
               <div className="kpi-lbl">Workflows</div>
-              <div className="kpi-val c-cyn">{workflows.length}</div>
-              <div className="kpi-sub">with at least one run</div>
+              <div className="kpi-val c-cyn">{formatScaleCount(m.workflows.total)}</div>
+              <div className="kpi-sub">{critical} critical</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-lbl">Agents</div>
+              <div className="kpi-val c-cyn">{formatScaleCount(m.agents.total)}</div>
+              <div className="kpi-sub">unique agents</div>
+            </div>
+            <div className="kpi-card kpi-card-click" onClick={() => onViewExecutions('failed')} role="button" tabIndex={0}>
+              <div className="kpi-lbl">Failed runs</div>
+              <div className="kpi-val c-red">{formatScaleCount(m.executions.failed)}</div>
+              <div className="kpi-sub">{m.executions.running} running</div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-            <div className="filter-row" style={{ marginBottom: 0 }}>
-              <FilterChip label={`All (${workflows.length})`} active={filter === 'all'} onClick={() => setFilter('all')} />
-              <FilterChip label={`Critical <60% (${critical})`} active={filter === 'critical'} color="red" onClick={() => setFilter('critical')} />
-              <FilterChip label="Warning 60-75%" active={filter === 'warning'} color="amb" onClick={() => setFilter('warning')} />
-              <FilterChip label="Healthy >90%" active={filter === 'healthy'} color="grn" onClick={() => setFilter('healthy')} />
+          <div className="metrics-section-lbl">Cost &amp; performance</div>
+          <div className="kpi-strip kpi-strip-4">
+            <div className="kpi-card">
+              <div className="kpi-lbl">Total cost</div>
+              <div className="kpi-val c-go">{fC(m.cost.total_usd)}</div>
+              <div className="kpi-sub">{fC(m.cost.avg_per_run)} avg / run</div>
             </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--mu)' }}>Sort:</span>
-              <select value={sort} onChange={(e) => setSort(e.target.value as HeatmapSort)} style={{ fontSize: 11, padding: '3px 7px', borderRadius: 4, border: '1px solid var(--b0)', background: 'var(--bg3)', color: 'var(--wh)' }}>
-                <option value="acc">Accuracy ↑</option>
-                <option value="acc-d">Accuracy ↓</option>
-                <option value="runs">Run count</option>
-              </select>
+            <div className="kpi-card">
+              <div className="kpi-lbl">Total tokens</div>
+              <div className="kpi-val c-vi">{fT(m.tokens.total)}</div>
+              <div className="kpi-sub">{fT(Math.round(m.tokens.avg_per_run))} avg / run</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-lbl">Avg latency</div>
+              <div className="kpi-val">{formatDuration(Math.round(m.latency.avg_ms))}</div>
+              <div className="kpi-sub">end-to-end per run</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-lbl">Platform accuracy</div>
+              <div className="kpi-val" style={{ color: accCol(m.accuracy.avg) }}>
+                {Math.round(m.accuracy.avg * 100)}%
+              </div>
+              <div className="kpi-sub">workspace average</div>
             </div>
           </div>
 
           <div className="mon-grid">
             <div>
-              <div className="sec-hdr">
-                <span>Workflow accuracy grid <span style={{ fontWeight: 400, color: 'var(--mu)' }}>{filtered.length} shown</span></span>
-              </div>
-              <div className="hmap-wrap">
-                <div className="wf-rows-scroll" ref={scrollRef}>
-                  {filtered.map((wf) => (
-                    <div key={wf.id} className={`wf-row${selectedWf?.id === wf.id ? ' sel' : ''}`} onClick={() => setSelectedWf(selectedWf?.id === wf.id ? null : wf)}>
-                      <span className="wf-name wf-name-row">
-                        <BlamrStatusDot status={wf.blamrStatus} />
-                        {wf.name}
-                      </span>
-                      <div className="wf-cells">
-                        {wf.runAccs.map((a, i) => (
-                          <button key={i} type="button" className="hcell" style={{ background: accColor(a), opacity: 0.45 + a * 0.55 }} title={`${Math.round(a * 100)}%`} onClick={(e) => handleCellClick(wf, i, e)} />
-                        ))}
-                      </div>
-                      <span className="wf-acc" style={{ color: accColor(wf.avgAcc) }}>{Math.round(wf.avgAcc * 100)}</span>
-                    </div>
-                  ))}
+              <div className="panel">
+                <div className="panel-hdr">
+                  <span>Top workflows by volume</span>
+                  <div className="panel-hdr-actions">
+                    <select value={wfSort} onChange={(e) => onWfSortChange(e.target.value)} className="select-sm" aria-label="Sort">
+                      <option value="runs">By executions</option>
+                      <option value="acc">Accuracy ↑</option>
+                      <option value="acc-d">Accuracy ↓</option>
+                      <option value="recent">Recently active</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
+                <div className="filter-row panel-filters">
+                  <FilterChip label="All" active={wfHealth === 'all'} onClick={() => onWfHealthChange('all')} />
+                  <FilterChip label={`Critical (${critical})`} active={wfHealth === 'critical'} color="red" onClick={() => onWfHealthChange('critical')} />
+                  <FilterChip label={`Warning (${warning})`} active={wfHealth === 'warning'} color="amb" onClick={() => onWfHealthChange('warning')} />
+                  <FilterChip label={`Fair (${fair})`} active={wfHealth === 'fair'} color="cyn" onClick={() => onWfHealthChange('fair')} />
+                  <FilterChip label={`Healthy (${healthy})`} active={wfHealth === 'healthy'} color="grn" onClick={() => onWfHealthChange('healthy')} />
+                </div>
 
-              {selectedWf && (
-                <div className="drawer">
-                  <div className="drawer-hdr">
-                    <span className="drawer-title">{selectedWf.name}</span>
-                    <BlamrStatusBadge status={selectedWf.blamrStatus} compact />
-                    <button type="button" className="close-x" onClick={() => setSelectedWf(null)}>×</button>
+                <div className="wf-table wf-table-metrics">
+                  <div className="wf-table-head">
+                    <span>Workflow</span>
+                    <span>Acc</span>
+                    <span>Cost</span>
+                    <span>Tokens</span>
+                    <span>Avg lat</span>
+                    <span />
                   </div>
-                  <div className="mi-row">
-                    <div className="mi"><div className="mi-val" style={{ color: accColor(selectedWf.avgAcc) }}>{Math.round(selectedWf.avgAcc * 100)}%</div><div className="mi-lbl">Avg accuracy</div></div>
-                    <div className="mi"><div className="mi-val">{selectedWf.totalRuns}</div><div className="mi-lbl">Total runs</div></div>
-                    <div className="mi"><div className="mi-val" style={{ fontSize: 12 }}>{formatLastSeen(selectedWf.lastSeenAt)}</div><div className="mi-lbl">Last blamr activity</div></div>
-                  </div>
-                  {selectedWf.agents.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: 10, color: 'var(--mu)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Agents · blamr connection</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {selectedWf.agents.map((a) => (
-                          <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 8px', background: 'var(--bg3)', borderRadius: 6, border: '1px solid var(--b0)' }}>
-                            <span className="mono" style={{ fontSize: 11, color: 'var(--wh)' }}>{a.id}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 10, color: 'var(--mu)' }}>{formatLastSeen(a.lastSeenAt)}</span>
-                              <BlamrStatusBadge status={a.blamrStatus} compact />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {workflows.map((wf) => (
+                    <WorkflowOverviewRow key={wf.id} wf={wf} onOpen={() => onWorkflowSelect(wf.id)} onRunSelect={onRunSelect} />
+                  ))}
+                  {workflowsTotal > workflows.length && (
+                    <button type="button" className="wf-table-more" onClick={onViewAllWorkflows}>
+                      View all {formatScaleCount(workflowsTotal)} workflows →
+                    </button>
                   )}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                    {selectedWf.realRuns.map((id) => {
-                      const run = runs.find((r) => r.id === id);
-                      return (
-                        <button key={id} type="button" className="mono" style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', background: run?.status === 'failed' ? 'var(--reD)' : 'var(--grD)', color: run?.status === 'failed' ? 'var(--reL)' : 'var(--grL)', border: `1px solid ${run?.status === 'failed' ? 'rgba(220,38,38,.3)' : 'rgba(5,150,105,.3)'}` }} onClick={() => onRunSelect(id)}>
-                          {id}
-                          {run && (
-                            <span style={{ marginLeft: 6, opacity: 0.75, fontSize: 10 }}>
-                              {run.layout === 'linear' ? '→' : run.layout === 'parallel' ? '∥' : '◇'}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="rpanel">
               <div className="rcard">
-                <div className="rcard-hdr">● Platform health</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 0' }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 24, fontWeight: 700 }}>{healthyPct}%</div>
-                  <div style={{ fontSize: 12, color: 'var(--muL)', lineHeight: 1.8 }}>
-                    <div>{workflows.length - critical} healthy</div>
-                    <div>{critical} critical</div>
+                <div className="rcard-hdr">Run outcomes</div>
+                <div className="outcome-bar" role="img" aria-label={`Success ${successPct}%, Failed ${failPct}%`}>
+                  <div className="outcome-seg outcome-seg-ok" style={{ width: `${successPct}%` }} />
+                  <div className="outcome-seg outcome-seg-fail" style={{ width: `${failPct}%` }} />
+                </div>
+                <div className="outcome-legend">
+                  <span><i className="legend-dot gr" /> Success {m.executions.success}</span>
+                  <span><i className="legend-dot re" /> Failed {m.executions.failed}</span>
+                  {m.executions.running > 0 && (
+                    <span><i className="legend-dot cy" /> Running {m.executions.running}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rcard">
+                <div className="rcard-hdr">Platform health</div>
+                <div className="health-row">
+                  <div className="health-pct">{healthyPct}%</div>
+                  <div className="health-breakdown">
+                    <div>{healthy} healthy</div>
+                    <div>{fair} fair</div>
                     <div>{warning} warning</div>
+                    <div>{critical} critical</div>
                   </div>
                 </div>
               </div>
+
               <div className="rcard">
                 <div className="rcard-hdr">Recent failures</div>
-                {runs.filter((r) => r.status === 'failed').slice(0, 5).map((r) => (
+                {recentFailures.map((r) => (
                   <div key={r.id} className="feed-item" onClick={() => onRunSelect(r.id)} role="button" tabIndex={0}>
-                    <div className="feed-dot" style={{ background: 'var(--reL)' }} />
-                    <div className="feed-text">{r.title || r.id}</div>
+                    <div className="feed-dot feed-dot-fail" />
+                    <div className="feed-text">
+                      <span className="feed-title">{r.title || r.id}</span>
+                      <span className="feed-meta mono">{r.workflow_id} · {fC(r.total_cost_usd)} · {fT(r.total_tokens)} tok</span>
+                    </div>
                   </div>
                 ))}
-                {!runs.some((r) => r.status === 'failed') && (
-                  <div style={{ fontSize: 11, color: 'var(--mu)' }}>No failed runs</div>
+                {!recentFailures.length && (
+                  <div className="table-muted" style={{ fontSize: 11 }}>No failed runs</div>
                 )}
+                <button type="button" className="btn btn-sm rcard-link" onClick={() => onViewExecutions('failed')}>
+                  All failed executions →
+                </button>
               </div>
             </div>
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function WorkflowOverviewRow({
+  wf,
+  onOpen,
+  onRunSelect,
+}: {
+  wf: WorkflowApiRow;
+  onOpen: () => void;
+  onRunSelect: (id: string) => void;
+}) {
+  return (
+    <div className="wf-overview-row" onClick={onOpen} role="button" tabIndex={0}>
+      <div className="wf-overview-main">
+        <BlamrStatusDot status={wf.blamr_status} />
+        <span className="wf-overview-name mono">{wf.name}</span>
+        <span className="wf-overview-meta">
+          {formatScaleCount(wf.run_count)} runs · {wf.agents.length} agents
+          {wf.failed_runs > 0 && <span className="wf-fail-badge"> · {wf.failed_runs} failed</span>}
+        </span>
+      </div>
+      <span className="wf-overview-acc mono" style={{ color: accCol(wf.avg_accuracy) }}>{Math.round(wf.avg_accuracy * 100)}%</span>
+      <span className="wf-overview-metric mono">{fC(wf.total_cost_usd)}</span>
+      <span className="wf-overview-metric mono">{fT(wf.total_tokens)}</span>
+      <span className="wf-overview-metric mono table-muted">{formatDuration(Math.round(wf.avg_duration_ms))}</span>
+      <span className="wf-overview-seen table-muted">{formatLastSeen(wf.last_run_at)}</span>
     </div>
   );
 }

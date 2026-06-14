@@ -25,12 +25,27 @@ export function ApiBanner({ error }: { error?: string | null }) {
   return null;
 }
 
-export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
+export function EmptyState({
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  subtitle?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--mu)' }}>
       <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.2 }}>○</div>
       <div style={{ fontSize: 14 }}>{title}</div>
       {subtitle && <div style={{ fontSize: 12, marginTop: 4 }}>{subtitle}</div>}
+      {actionLabel && onAction && (
+        <button type="button" className="btn-primary" style={{ marginTop: 16 }} onClick={onAction}>
+          {actionLabel}
+        </button>
+      )}
     </div>
   );
 }

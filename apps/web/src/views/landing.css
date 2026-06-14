@@ -1,22 +1,12 @@
 .landing {
+  width: 100%;
   min-height: 100vh;
-  background: var(--bg);
   color: var(--wh);
   font-family: var(--sans);
 }
 
 .landing-nav {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--b0);
-  background: rgba(7, 13, 26, 0.92);
-  backdrop-filter: blur(10px);
+  /* glass + layout in shell.css */
 }
 
 .landing-nav-brand {
@@ -535,12 +525,81 @@
   text-decoration: underline;
 }
 
+.landing-how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.landing-how-step {
+  background: var(--bg2);
+  border: 1px solid var(--b0);
+  border-radius: var(--rad-lg);
+  padding: 18px 16px;
+  text-align: center;
+  transition: border-color 0.3s, transform 0.3s;
+}
+
+.landing-how-step:hover {
+  border-color: rgba(8, 145, 178, 0.4);
+  transform: translateY(-2px);
+}
+
+.landing-how-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--cy);
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+
+.landing-how-step h4 { font-size: 14px; margin-bottom: 8px; }
+.landing-how-step p { font-size: 12px; color: var(--muL); line-height: 1.55; }
+
+.landing-signal-demo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 900px;
+  margin: 24px auto 0;
+}
+
+.landing-signal-card {
+  background: var(--bg2);
+  border: 1px solid var(--b0);
+  border-radius: var(--rad-lg);
+  padding: 16px;
+  text-align: center;
+}
+
+.landing-signal-lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mu);
+  margin-bottom: 6px;
+}
+
+.landing-signal-val {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cyL);
+  margin-bottom: 4px;
+}
+
+.landing-signal-desc { font-size: 11px; color: var(--muL); }
+
 @media (max-width: 900px) {
   .landing-stats { grid-template-columns: repeat(2, 1fr); }
   .landing-philosophy,
   .landing-gap-grid,
   .landing-example-cols,
   .landing-why-grid,
-  .landing-deploy { grid-template-columns: 1fr; }
+  .landing-deploy,
+  .landing-how-grid,
+  .landing-signal-demo { grid-template-columns: 1fr; }
   .landing-nav-links a.hide-sm { display: none; }
 }

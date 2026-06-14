@@ -1,6 +1,6 @@
 import React from 'react';
 
-type ChipColor = '' | 'red' | 'grn' | 'amb';
+type ChipColor = '' | 'red' | 'grn' | 'amb' | 'cyn';
 
 export function FilterChip({
   label,
