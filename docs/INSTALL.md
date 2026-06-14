@@ -177,7 +177,7 @@ await emitter.completeRun({ businessFailed: false });
 | `BLAMR_API_KEY` | — | Ingest key (`ingest:write`) |
 | `BLAMR_ENDPOINT` | `http://localhost:3001/v1` | Ingest base URL |
 
-More examples: [README.md](../README.md#connect-your-agent)
+More examples (confidence gates, platform mode): [CONCEPTS.md](./CONCEPTS.md)
 
 ---
 
@@ -336,5 +336,6 @@ More: [DEPLOYMENT.md § Troubleshooting](./DEPLOYMENT.md#troubleshooting)
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker env vars, architecture, production checklist |
 | [deploy/helm/README.md](../deploy/helm/README.md) | Kubernetes / Helm install |
 | [OPERATIONS.md](./OPERATIONS.md) | Day-2 ops, worker health, restarts |
+| [CONCEPTS.md](./CONCEPTS.md) | CausalEdge, drift, blame, confidence gates |
 | [PUBLISHING.md](./PUBLISHING.md) | GitHub / npm release checklist |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Dev setup for contributors |
