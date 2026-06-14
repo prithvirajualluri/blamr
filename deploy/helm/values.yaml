@@ -1,0 +1,199 @@
+# Default values for blamr Helm chart.
+# See deploy/helm/README.md for install instructions.
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Use an existing secret with keys: jwt-secret, ingest-secret
+# (and postgresql-password if using external DB). When set, chart secret is not created.
+existingSecret: ""
+
+secrets:
+  jwtSecret: "change-me-in-production"
+  ingestSecret: "change-me-ingest-secret"
+
+postgresql:
+  enabled: true
+  auth:
+    database: blamr
+    username: blamr
+    password: blamr_dev
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+valkey:
+  enabled: true
+  architecture: standalone
+  # Override if subchart service name differs: kubectl get svc -n blamr | grep valkey
+  serviceHost: ""
+  auth:
+    enabled: false
+  primary:
+    persistence:
+      enabled: true
+      size: 2Gi
+
+clickhouse:
+  enabled: true
+  image:
+    repository: clickhouse/clickhouse-server
+    tag: "24-alpine"
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+redpanda:
+  enabled: true
+  image:
+    repository: redpandadata/redpanda
+    tag: v24.1.1
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+ollama:
+  enabled: true
+  image:
+    repository: ollama/ollama
+    tag: latest
+  persistence:
+    enabled: true
+    size: 30Gi
+  models:
+    embed: nomic-embed-text
+    chat: llama3.2:3b
+  resources:
+    requests:
+      cpu: "1"
+      memory: 4Gi
+    limits:
+      memory: 8Gi
+
+# External services (when enabled: false above)
+external:
+  postgresql:
+    host: ""
+    port: 5432
+  valkey:
+    host: ""
+    port: 6379
+  clickhouse:
+    host: ""
+    url: ""
+  redpanda:
+    host: ""
+    brokers: ""
+  ollama:
+    host: ""
+    baseUrl: ""
+
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: blamr/api
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+ingest:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: blamr/ingest
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3001
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+workers:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: blamr/workers
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  env:
+    blamrMlEnabled: "true"
+    blamrSemanticDrift: "true"
+    blamrLlmBlameReason: "true"
+    blamrEmbeddingModel: nomic-embed-text
+    blamrLlmReasonModel: llama3.2:3b
+    blamrLlmApiKey: local
+
+web:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: blamr/web
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  # VITE_* URLs are baked into the web image at build time.
+  # Rebuild apps/web with these public URLs before deploying.
+  publicUrls:
+    api: "https://api.blamr.example.com"
+    ingest: "https://ingest.blamr.example.com"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  tls: []
+  hosts:
+    api: api.blamr.example.com
+    ingest: ingest.blamr.example.com
+    web: app.blamr.example.com
+
+initJobs:
+  clickhouse:
+    enabled: true
+  ollama:
+    enabled: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

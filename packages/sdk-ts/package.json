@@ -1,0 +1,44 @@
+{
+  "name": "@blamr/sdk",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "blamr TypeScript SDK for multi-agent causal tracing",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blamr-ai/blamr.git",
+    "directory": "packages/sdk-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/blamr-ai/blamr/issues"
+  },
+  "homepage": "https://github.com/blamr-ai/blamr#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "keywords": [
+    "blamr",
+    "multi-agent",
+    "causal",
+    "observability",
+    "sdk"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "npm run build && node --test dist/signals.test.js"
+  },
+  "dependencies": {
+    "@blamr/types": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

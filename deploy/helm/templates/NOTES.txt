@@ -1,0 +1,37 @@
+Thank you for installing {{ .Chart.Name }} v{{ .Chart.Version }}.
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+
+Ingress hosts:
+  Dashboard: https://{{ .Values.ingress.hosts.web }}
+  API:       https://{{ .Values.ingress.hosts.api }}
+  Ingest:    https://{{ .Values.ingress.hosts.ingest }}
+
+{{- else }}
+
+Port-forward (local testing):
+
+  kubectl port-forward svc/{{ include "blamr.fullname" . }}-web 8080:8080
+  kubectl port-forward svc/{{ include "blamr.fullname" . }}-api 3000:3000
+  kubectl port-forward svc/{{ include "blamr.fullname" . }}-ingest 3001:3001
+
+  Dashboard: http://localhost:8080
+
+{{- end }}
+
+First-time setup:
+  1. Register a workspace in the dashboard
+  2. Create an ingest API key (Settings → API & keys)
+  3. Point agents at the ingest URL
+
+Init jobs (first install may take 10–20 min for Ollama model pull):
+  kubectl get jobs -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl logs job/{{ include "blamr.fullname" . }}-ollama-init -f
+
+Workers (required for runs to appear):
+  kubectl logs deploy/{{ include "blamr.fullname" . }}-workers -f
+
+Docs: https://github.com/blamr-ai/blamr/blob/main/deploy/helm/README.md

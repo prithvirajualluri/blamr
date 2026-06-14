@@ -1,0 +1,19 @@
+{
+  "name": "@blamr/ml",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production ML drift classification and root-cause ranking for blamr",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc && cp -r models dist/models",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@blamr/types": "*",
+    "@blamr/semantic": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

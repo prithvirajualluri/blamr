@@ -1,0 +1,40 @@
+# Minikube / kind — smaller footprint, NodePort optional
+#   helm install blamr ./deploy/helm -f deploy/helm/values-local.yaml
+
+postgresql:
+  primary:
+    persistence:
+      size: 4Gi
+
+clickhouse:
+  persistence:
+    size: 5Gi
+
+redpanda:
+  persistence:
+    size: 5Gi
+
+ollama:
+  persistence:
+    size: 15Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 4Gi
+
+api:
+  replicaCount: 1
+
+ingest:
+  replicaCount: 1
+
+web:
+  replicaCount: 1
+  publicUrls:
+    api: "http://localhost:3000"
+    ingest: "http://localhost:3001"
+
+ingress:
+  enabled: false

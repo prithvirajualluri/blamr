@@ -1,0 +1,76 @@
+{{- if .Values.redpanda.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "blamr.fullname" . }}-redpanda
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redpanda
+spec:
+  type: ClusterIP
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092
+  selector:
+    {{- include "blamr.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redpanda
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "blamr.fullname" . }}-redpanda
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redpanda
+spec:
+  serviceName: {{ include "blamr.fullname" . }}-redpanda
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "blamr.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redpanda
+  template:
+    metadata:
+      labels:
+        {{- include "blamr.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redpanda
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: redpanda
+          image: "{{ .Values.redpanda.image.repository }}:{{ .Values.redpanda.image.tag }}"
+          command:
+            - redpanda
+            - start
+            - --smp
+            - "1"
+            - --memory
+            - 512M
+            - --overprovisioned
+            - --kafka-addr
+            - internal://0.0.0.0:9092
+            - --advertise-kafka-addr
+            - internal://{{ include "blamr.fullname" . }}-redpanda:9092
+          ports:
+            - containerPort: 9092
+              name: kafka
+          resources:
+            {{- toYaml .Values.redpanda.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redpanda/data
+  {{- if .Values.redpanda.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.redpanda.persistence.size }}
+  {{- end }}
+{{- end }}

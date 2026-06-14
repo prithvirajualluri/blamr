@@ -1,0 +1,64 @@
+{{- if .Values.ollama.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "blamr.fullname" . }}-ollama
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 11434
+      targetPort: 11434
+  selector:
+    {{- include "blamr.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "blamr.fullname" . }}-ollama
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ollama
+spec:
+  serviceName: {{ include "blamr.fullname" . }}-ollama
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "blamr.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ollama
+  template:
+    metadata:
+      labels:
+        {{- include "blamr.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ollama
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ollama
+          image: "{{ .Values.ollama.image.repository }}:{{ .Values.ollama.image.tag }}"
+          ports:
+            - containerPort: 11434
+              name: http
+          resources:
+            {{- toYaml .Values.ollama.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /root/.ollama
+  {{- if .Values.ollama.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.ollama.persistence.size }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,34 @@
+# blamr configuration example
+# Copy to blamr.yaml and customize for your deployment
+
+workspace:
+  name: "My Workspace"
+  slug: "my-workspace"
+  plan: oss
+
+settings:
+  retention_days: 30
+  confidence_inflation_threshold: 0.15
+  intent_drift_threshold: 0.20
+  rate_limit_per_min: 1000
+
+ingest:
+  endpoint: http://localhost:3001/v1
+  # api_key: set via BLAMR_API_KEY env var
+
+api:
+  endpoint: http://localhost:3000/v1
+
+webhooks:
+  - name: "Slack alerts"
+    url: "https://hooks.slack.com/services/xxx"
+    events:
+      - run.failed
+      - blame.detected
+      - confidence.inflated
+
+sdk:
+  workflow_id: "my-workflow"
+  agent_id: "my-agent"
+  auto_handoff: true
+  confidence_heuristic: true

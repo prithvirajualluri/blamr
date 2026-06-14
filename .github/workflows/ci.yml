@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: |
+          npm run build -w @blamr/types
+          npm run build -w @blamr/sdk
+          npm run build -w @blamr/semantic
+          npm run build -w @blamr/ml
+          npm run build -w @blamr/api
+          npm run build -w @blamr/ingest
+          npm run build -w @blamr/workers
+          npm run build -w @blamr/web
+
+      - name: Test
+        run: npm run test

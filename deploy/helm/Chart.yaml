@@ -1,0 +1,24 @@
+apiVersion: v2
+name: blamr
+description: Causal intelligence platform for multi-agent AI systems
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - observability
+  - multi-agent
+  - causal-inference
+maintainers:
+  - name: blamr
+    email: prithvi@blamr.ai
+
+dependencies:
+  - name: postgresql
+    version: "15.5.38"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: valkey
+    version: "2.4.7"
+    repository: https://charts.bitnami.com/bitnami
+    condition: valkey.enabled

@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package blamr;
+
+service BlameEngine {
+  rpc ComputeBlame (ComputeBlameRequest) returns (ComputeBlameResponse);
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+message CausalEdge {
+  string id = 1;
+  string run_id = 2;
+  string workflow_id = 3;
+  string workspace_id = 4;
+  string from_agent = 5;
+  string to_agent = 6;
+  int32 hop_index = 7;
+  int64 timestamp_ms = 8;
+  double confidence_in = 9;
+  double confidence_out = 10;
+  double intent_delta = 11;
+  double influence_score = 12;
+  int32 tokens_in = 13;
+  int32 tokens_out = 14;
+  int32 latency_ms = 15;
+  string model = 16;
+  string call_type = 17;
+  double cost_usd = 18;
+}
+
+message WorkflowRun {
+  string id = 1;
+  string workflow_id = 2;
+  string workspace_id = 3;
+  string status = 4;
+  repeated string agents = 5;
+  repeated CausalEdge edges = 6;
+  double accuracy_score = 7;
+  string error_summary = 8;
+}
+
+message AgentBlame {
+  string agent = 1;
+  double blame_pct = 2;
+  bool is_root = 3;
+  string reason = 4;
+  bool confidence_inflated = 5;
+}
+
+message BlameReport {
+  string run_id = 1;
+  string root_cause_agent = 2;
+  double root_cause_pct = 3;
+  string method = 4;
+  int64 computed_at_ms = 5;
+  repeated AgentBlame agents = 6;
+}
+
+message ComputeBlameRequest {
+  WorkflowRun run = 1;
+}
+
+message ComputeBlameResponse {
+  BlameReport report = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+}

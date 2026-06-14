@@ -1,0 +1,40 @@
+{
+  "name": "@blamr/types",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Shared types and causal helpers for blamr",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blamr-ai/blamr.git",
+    "directory": "packages/types"
+  },
+  "bugs": {
+    "url": "https://github.com/blamr-ai/blamr/issues"
+  },
+  "homepage": "https://github.com/blamr-ai/blamr#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "keywords": [
+    "blamr",
+    "multi-agent",
+    "causal",
+    "types"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "npm run build && node --test dist/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

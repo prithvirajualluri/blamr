@@ -1,0 +1,38 @@
+{
+  "name": "blamr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Causal intelligence platform for multi-agent AI systems (monorepo root — not published to npm)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blamr-ai/blamr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blamr-ai/blamr/issues"
+  },
+  "homepage": "https://github.com/blamr-ai/blamr#readme",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "adapters/*",
+    "samples/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev -w @blamr/api",
+    "dev:ingest": "npm run dev -w @blamr/ingest",
+    "dev:workers": "npm run dev -w @blamr/workers",
+    "dev:web": "npm run dev -w @blamr/web",
+    "dev:samples": "npm run real --prefix samples/agents",
+    "run:workflow": "./scripts/run-workflow.sh",
+    "docker:up": "./scripts/docker-up.sh",
+    "helm:lint": "./scripts/helm-lint.sh",
+    "train:ml": "cd training && python3 train.py",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,252 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blamr
+      POSTGRES_USER: blamr
+      POSTGRES_PASSWORD: blamr_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blamr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    volumes:
+      - chdata:/var/lib/clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse-init:
+    image: curlimages/curl:8.5.0
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - ./scripts/docker-init-clickhouse.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+    restart: "no"
+
+  redpanda:
+    image: redpandadata/redpanda:v24.1.1
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+    volumes:
+      - rpdata:/var/lib/redpanda/data
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    volumes:
+      - vkdata:/data
+    ports:
+      - "6379:6379"
+    command: valkey-server --save 60 1
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Local Ollama — embeddings (nomic-embed-text) + chat (llama3.2:3b).
+  # ~3 GB disk; recommend 6+ GB RAM for Ollama + stack.
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollamadata:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  ollama-init:
+    image: curlimages/curl:8.5.0
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ./scripts/docker-pull-ollama-models.sh:/pull.sh:ro
+    entrypoint: ["/bin/sh", "/pull.sh"]
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      BLAMR_OLLAMA_EMBED_MODEL: ${BLAMR_EMBEDDING_MODEL:-nomic-embed-text}
+      BLAMR_OLLAMA_CHAT_MODEL: ${BLAMR_LLM_REASON_MODEL:-llama3.2:3b}
+    restart: "no"
+
+  blame-engine:
+    profiles: ["blame-engine"]
+    build: ./packages/engine
+    ports:
+      - "50051:50051"
+    environment:
+      BLAME_ENGINE_ADDR: "0.0.0.0:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://blamr:blamr_dev@postgres:5432/blamr
+      REDIS_URL: redis://valkey:6379
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: blamr
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  ingest:
+    build:
+      context: .
+      dockerfile: apps/ingest/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://blamr:blamr_dev@postgres:5432/blamr
+      REDIS_URL: redis://valkey:6379
+      KAFKA_BROKERS: redpanda:9092
+      BLAMR_INGEST_SECRET: ${BLAMR_INGEST_SECRET:-dev-ingest-secret}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3001',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://blamr:blamr_dev@postgres:5432/blamr
+      REDIS_URL: redis://valkey:6379
+      KAFKA_BROKERS: redpanda:9092
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: blamr
+      BLAMR_ML_ENABLED: ${BLAMR_ML_ENABLED:-true}
+      BLAMR_SEMANTIC_DRIFT: ${BLAMR_SEMANTIC_DRIFT:-true}
+      BLAMR_LLM_BLAME_REASON: ${BLAMR_LLM_BLAME_REASON:-true}
+      BLAMR_LLM_BASE_URL: ${BLAMR_LLM_BASE_URL:-http://ollama:11434/v1}
+      BLAMR_LLM_API_KEY: ${BLAMR_LLM_API_KEY:-local}
+      BLAMR_EMBEDDING_MODEL: ${BLAMR_EMBEDDING_MODEL:-nomic-embed-text}
+      BLAMR_LLM_REASON_MODEL: ${BLAMR_LLM_REASON_MODEL:-llama3.2:3b}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
+      ollama-init:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      ingest:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+        VITE_INGEST_URL: ${VITE_INGEST_URL:-http://localhost:3001}
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  traefik:
+    profiles: ["gateway"]
+    image: traefik:v3.1
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80"
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+volumes:
+  pgdata:
+  chdata:
+  rpdata:
+  vkdata:
+  ollamadata:

@@ -1,0 +1,63 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "blamr.fullname" . }}
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- if .Values.web.enabled }}
+    - host: {{ .Values.ingress.hosts.web | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "blamr.fullname" . }}-web
+                port:
+                  number: {{ .Values.web.service.port }}
+    {{- end }}
+    {{- if .Values.api.enabled }}
+    - host: {{ .Values.ingress.hosts.api | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "blamr.fullname" . }}-api
+                port:
+                  number: {{ .Values.api.service.port }}
+    {{- end }}
+    {{- if .Values.ingest.enabled }}
+    - host: {{ .Values.ingress.hosts.ingest | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "blamr.fullname" . }}-ingest
+                port:
+                  number: {{ .Values.ingest.service.port }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,47 @@
+{{- if and .Values.clickhouse.enabled .Values.initJobs.clickhouse.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "blamr.fullname" . }}-clickhouse-init
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  init-clickhouse.sh: |
+{{ .Files.Get "files/init-clickhouse.sh" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "blamr.fullname" . }}-clickhouse-init
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: curlimages/curl:8.5.0
+          command: ["/bin/sh", "/scripts/init-clickhouse.sh"]
+          env:
+            - name: CLICKHOUSE_URL
+              value: {{ include "blamr.clickhouseUrl" . | quote }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "blamr.fullname" . }}-clickhouse-init
+            defaultMode: 0755
+{{- end }}

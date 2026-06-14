@@ -1,0 +1,28 @@
+{
+  "name": "blamr-sample-agents",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Real OpenAI + Anthropic multi-agent workflows instrumented with blamr",
+  "type": "module",
+  "scripts": {
+    "real": "tsx src/run-real.ts",
+    "real:all": "tsx src/run-real.ts all",
+    "real:support": "tsx src/run-real.ts support",
+    "real:research": "tsx src/run-real.ts research",
+    "real:incident": "tsx src/run-real.ts incident",
+    "real:procurement": "tsx src/run-real.ts procurement",
+    "fail": "BLAMR_FAILURE_TESTS=1 tsx src/run-fail.ts all",
+    "fail:all": "BLAMR_FAILURE_TESTS=1 tsx src/run-fail.ts all",
+    "fail:support": "BLAMR_FAILURE_TESTS=1 tsx src/run-fail.ts support",
+    "fail:research": "BLAMR_FAILURE_TESTS=1 tsx src/run-fail.ts research",
+    "fail:incident": "BLAMR_FAILURE_TESTS=1 tsx src/run-fail.ts incident"
+  },
+  "dependencies": {
+    "@blamr/sdk": "*",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.15.7",
+    "typescript": "^5.4.5"
+  }
+}

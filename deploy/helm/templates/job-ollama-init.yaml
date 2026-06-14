@@ -1,0 +1,51 @@
+{{- if and .Values.ollama.enabled .Values.initJobs.ollama.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "blamr.fullname" . }}-ollama-init
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  init-ollama.sh: |
+{{ .Files.Get "files/init-ollama.sh" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "blamr.fullname" . }}-ollama-init
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: curlimages/curl:8.5.0
+          command: ["/bin/sh", "/scripts/init-ollama.sh"]
+          env:
+            - name: OLLAMA_URL
+              value: http://{{ include "blamr.ollama.host" . }}:11434
+            - name: BLAMR_OLLAMA_EMBED_MODEL
+              value: {{ .Values.ollama.models.embed | quote }}
+            - name: BLAMR_OLLAMA_CHAT_MODEL
+              value: {{ .Values.ollama.models.chat | quote }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "blamr.fullname" . }}-ollama-init
+            defaultMode: 0755
+{{- end }}

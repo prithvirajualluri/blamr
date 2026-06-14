@@ -1,0 +1,20 @@
+[package]
+name = "blamr-sdk"
+version = "0.1.0"
+description = "blamr Python SDK for multi-agent causal tracing"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project]
+name = "blamr-sdk"
+version = "0.1.0"
+description = "blamr Python SDK"
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

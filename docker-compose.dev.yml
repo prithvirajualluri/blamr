@@ -1,0 +1,41 @@
+version: '3.9'
+
+# Development overrides — use with:
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages/types/src:/app/packages/types/src
+    environment:
+      NODE_ENV: development
+    command: npm run dev -w @blamr/api
+
+  ingest:
+    volumes:
+      - ./apps/ingest/src:/app/apps/ingest/src
+    command: npm run dev -w @blamr/ingest
+
+  workers:
+    volumes:
+      - ./apps/workers/src:/app/apps/workers/src
+    command: npm run dev -w @blamr/workers
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+    ports:
+      - "8080:8080"
+    command: npm run dev -w @blamr/web
+
+  blame-engine:
+    volumes:
+      - ./packages/engine/src:/app/src
+      - ./packages/engine/proto:/app/proto

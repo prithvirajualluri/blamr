@@ -1,0 +1,79 @@
+{{- if .Values.ingest.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "blamr.fullname" . }}-ingest
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingest
+spec:
+  type: {{ .Values.ingest.service.type }}
+  ports:
+    - port: {{ .Values.ingest.service.port }}
+      targetPort: http
+      name: http
+  selector:
+    {{- include "blamr.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ingest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "blamr.fullname" . }}-ingest
+  labels:
+    {{- include "blamr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingest
+spec:
+  replicas: {{ .Values.ingest.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "blamr.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ingest
+  template:
+    metadata:
+      labels:
+        {{- include "blamr.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ingest
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "blamr.waitInitContainers" . | nindent 8 }}
+      containers:
+        - name: ingest
+          image: "{{ if .Values.global.imageRegistry }}{{ .Values.global.imageRegistry }}/{{ end }}{{ .Values.ingest.image.repository }}:{{ .Values.ingest.image.tag }}"
+          imagePullPolicy: {{ .Values.ingest.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3001
+          env:
+            {{- include "blamr.ingest.env" . | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.ingest.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

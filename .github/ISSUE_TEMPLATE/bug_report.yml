@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a bug in blamr platform or SDK
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include run ID or workflow ID if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. docker compose up / ./scripts/dev-backend.sh
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Dashboard (web)
+        - API
+        - Ingest
+        - Workers
+        - SDK (@blamr/sdk)
+        - Docker / deployment
+        - Sample agents
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: blamr version or commit
+      placeholder: v0.1.0 or git sha
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
