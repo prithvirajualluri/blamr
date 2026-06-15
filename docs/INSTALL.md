@@ -170,12 +170,78 @@ await emitter.emitEdge({
 await emitter.completeRun({ businessFailed: false });
 ```
 
+### Automatic usage telemetry (tokens & cost)
+
+If your agent already sends `model` and I/O previews but omits `tokens_in`, `tokens_out`, or `cost_usd`, the SDK **enriches each `emitEdge` automatically** (default on):
+
+- Estimates tokens from preview text (~4 characters per token)
+- Estimates `cost_usd` from built-in model pricing (Claude Sonnet, GPT-4o, etc.)
+- Normalizes non-standard `call_type` values (e.g. `tool_call` → `LLM call` when a model is set)
+
+No changes to agent business logic are required — only keep sending previews and model name:
+
+```typescript
+await emitter.emitEdge({
+  from_agent: 'search_agent',
+  to_agent: 'fetch_agent',
+  model: 'claude-sonnet-4-6',
+  call_type: 'tool_call',
+  confidence_out: 0.3,
+  input_preview: 'user query…',
+  output_preview: 'search results…',
+  // tokens_in, tokens_out, cost_usd optional — SDK fills when missing
+});
+```
+
+For **exact** provider usage (Anthropic/OpenAI), wrap the client once at init. The next `emitEdge` with zero tokens consumes the last LLM call’s usage:
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { wrapClient } from '@blamr/sdk';
+
+const anthropic = wrapClient(new Anthropic(), {
+  workflowId: 'web-research',
+  agentId: 'orchestrator',
+  apiKey: process.env.BLAMR_API_KEY!,
+  endpoint: process.env.BLAMR_ENDPOINT ?? 'http://localhost:3001/v1',
+  telemetry: { enrichMissingUsage: true, attachProviderUsage: true },
+});
+
+// anthropic.messages.create() — usage queued for the next emitEdge
+// emitter.emitEdge({ ... }) — unchanged
+```
+
+Optional emitter config (instead of env):
+
+```typescript
+new BlamrEmitter(
+  {
+    workflowId: 'web-research',
+    agentId: 'orchestrator',
+    telemetry: {
+      enrichMissingUsage: true,
+      modelPricing: {
+        'claude-sonnet-4-6': { inputPer1M: 3, outputPer1M: 15 },
+      },
+    },
+  },
+  process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT!,
+);
+```
+
+**Dashboard:** **Workflows → Instrumentation** flags missing usage, wrong `from_agent`, intent sign, and other SDK integration issues from recent runs.
+
+Estimates are approximate; re-run the workflow after upgrading `@blamr/sdk` — existing runs are not backfilled.
+
 ### Environment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BLAMR_API_KEY` | — | Ingest key (`ingest:write`) |
 | `BLAMR_ENDPOINT` | `http://localhost:3001/v1` | Ingest base URL |
+| `BLAMR_ENRICH_USAGE` | `1` | Estimate tokens/cost from previews when omitted |
+| `BLAMR_ATTACH_PROVIDER_USAGE` | `1` | Attach usage from wrapped Anthropic/OpenAI calls |
 
 More examples (confidence gates, platform mode): [CONCEPTS.md](./CONCEPTS.md)
 
@@ -184,8 +250,14 @@ More examples (confidence gates, platform mode): [CONCEPTS.md](./CONCEPTS.md)
 ## 4. Python SDK
 
 ```bash
-git clone https://github.com/blamr-ai/blamr
+git clone https://github.com/prithvirajualluri/blamr
 pip install ./blamr/packages/sdk-py
+```
+
+Or install directly from Git:
+
+```bash
+pip install "git+https://github.com/prithvirajualluri/blamr.git#subdirectory=packages/sdk-py"
 ```
 
 When published to PyPI:
@@ -197,24 +269,69 @@ pip install blamr-sdk
 ### Minimal usage
 
 ```python
+import os
 from blamr_sdk.client import BlamrEmitter
 
-emitter = BlamrEmitter("my-workflow", "my_agent", api_key="bk_live_...")
+emitter = BlamrEmitter(
+    "web-research",
+    "orchestrator",
+    api_key=os.environ["BLAMR_API_KEY"],
+    endpoint=os.environ.get("BLAMR_ENDPOINT", "http://localhost:3001/v1"),
+)
+
 run_id = emitter.start_run()
 emitter.emit_edge(
-    from_agent="my_agent",
-    to_agent="next_agent",
-    confidence_in=1.0,
-    confidence_out=0.9,
-    intent_delta=0.05,
-    influence_score=0.8,
-    input_preview="user input",
-    output_preview="agent output",
+    from_agent="search_agent",
+    to_agent="fetch_agent",
+    model="claude-sonnet-4-6",
+    call_type="tool_call",
+    confidence_out=0.3,
+    input_preview="user query",
+    output_preview="search results",
+    # tokens_in, tokens_out, cost_usd optional — enriched automatically
 )
 emitter.complete_run("success")
 ```
 
----
+### Automatic usage telemetry
+
+Same behavior as the TypeScript SDK (on by default):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLAMR_ENRICH_USAGE` | on | Estimate tokens/cost from previews |
+| `BLAMR_ATTACH_PROVIDER_USAGE` | on | Use recorded provider usage on next `emit_edge` |
+
+Optional — record **exact** Anthropic usage before `emit_edge` (no change to edge fields):
+
+```python
+import time
+from blamr_sdk.telemetry import ProviderUsage
+
+start = time.time()
+message = client.messages.create(...)
+
+emitter.record_provider_usage(
+    ProviderUsage(
+        model=message.model,
+        tokens_in=message.usage.input_tokens,
+        tokens_out=message.usage.output_tokens,
+        latency_ms=int((time.time() - start) * 1000),
+    )
+)
+
+emitter.emit_edge(...)  # unchanged — usage attached automatically
+```
+
+### Environment
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLAMR_API_KEY` | — | Ingest key (`ingest:write`) |
+| `BLAMR_ENDPOINT` | `http://localhost:3001/v1` | Ingest base URL |
+| `BLAMR_ENRICH_USAGE` | on | Estimate missing tokens/cost |
+| `BLAMR_ATTACH_PROVIDER_USAGE` | on | Attach last provider usage |
+
 
 ## 5. MCP proxy (no global CLI)
 

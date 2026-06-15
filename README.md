@@ -72,9 +72,13 @@ const emitter = new BlamrEmitter(
 );
 
 emitter.startRun();
-await emitter.emitEdge({ /* confidence, intent_delta, I/O previews, … */ });
+await emitter.emitEdge({
+  /* model, confidence, intent_delta, input_preview, output_preview — tokens/cost auto-filled when omitted */
+});
 await emitter.completeRun({ businessFailed: false });
 ```
+
+Set `BLAMR_ENRICH_USAGE=1` (default) to estimate tokens and cost from previews without changing agent logic. See **[docs/INSTALL.md](docs/INSTALL.md#automatic-usage-telemetry-tokens--cost)**.
 
 Python SDK, MCP middleware, LangGraph/CrewAI/AutoGen adapters → **[docs/INSTALL.md](docs/INSTALL.md)**
 

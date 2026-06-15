@@ -24,6 +24,22 @@ Agent-side signals use `@blamr/sdk` helpers: `computeHopSignals()` merges lexica
 
 ---
 
+## Cost and token telemetry
+
+blamr sums `cost_usd` and token counts from ingested edges — it does **not** call OpenAI or Anthropic billing APIs.
+
+| Source | Accuracy | Agent change |
+|--------|----------|--------------|
+| Explicit `tokens_in` / `tokens_out` / `cost_usd` on each edge | Exact | Pass provider `usage` on `emitEdge` |
+| SDK auto-enrich (`BLAMR_ENRICH_USAGE=1`, default on) | Estimated from previews + model pricing | None if previews + model are already sent |
+| `record_provider_usage` + `emit_edge` (Python) or `wrapClient` (TS) | Exact from last LLM call | Init/wrapper only |
+
+Python and TypeScript SDKs share the same env flags: `BLAMR_ENRICH_USAGE`, `BLAMR_ATTACH_PROVIDER_USAGE`.
+
+The dashboard **Workflows → Instrumentation** column surfaces integration gaps (missing usage, collapsed `from_agent`, wrong intent sign, etc.) from recent runs.
+
+---
+
 ## Confidence accept level
 
 Set a per-workflow minimum confidence. Runs below the threshold are marked **failed** (workers re-check server-side from ingested edges).
@@ -138,3 +154,5 @@ Copy [`.env.example`](../.env.example). Key variables:
 | `BLAMR_EMBEDDING_MODEL` | workers | Default `nomic-embed-text` |
 | `BLAMR_API_KEY` | agents | Ingest key from dashboard |
 | `BLAMR_ENDPOINT` | agents | Default `http://localhost:3001/v1` |
+| `BLAMR_ENRICH_USAGE` | agents | Estimate tokens/cost from previews when omitted (default on) |
+| `BLAMR_ATTACH_PROVIDER_USAGE` | agents | Attach wrapped LLM provider usage to next edge (default on) |

@@ -261,6 +261,17 @@ emitter.startRun();
 <span class="cmd">await</span> emitter.completeRun({ businessFailed: <span class="cmd">false</span> });</pre>
           </div>
 
+          <h3>Automatic usage telemetry</h3>
+          <p>When <code>tokens_in</code>, <code>tokens_out</code>, or <code>cost_usd</code> are omitted, the SDK estimates them from I/O previews and model pricing (default on). Set <code>BLAMR_ENRICH_USAGE=0</code> to disable. Wrap Anthropic/OpenAI with <code>wrapClient</code> for exact provider usage on the next <code>emitEdge</code>.</p>
+          <table class="doc-table">
+            <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>BLAMR_ENRICH_USAGE</code></td><td>on</td><td>Estimate tokens/cost from previews</td></tr>
+              <tr><td><code>BLAMR_ATTACH_PROVIDER_USAGE</code></td><td>on</td><td>Attach wrapped LLM usage to next edge</td></tr>
+            </tbody>
+          </table>
+          <p>Dashboard <strong>Workflows → Instrumentation</strong> flags missing usage and other SDK integration issues.</p>
+
           <h3>Confidence gate (optional)</h3>
           <div class="code-block">
             <div class="code-block-header"><span>TypeScript</span><button type="button" class="code-copy">Copy</button></div>
@@ -283,28 +294,27 @@ emitter.startRun();
           <h2>Connect agents — Python SDK</h2>
           <div class="code-block">
             <div class="code-block-header"><span>Terminal</span><button type="button" class="code-copy">Copy</button></div>
-            <pre><span class="cmd">pip install</span> ./packages/sdk-py</pre>
+            <pre><span class="cmd">pip install</span> "git+https://github.com/prithvirajualluri/blamr.git#subdirectory=packages/sdk-py"</pre>
           </div>
+          <p>With <code>BLAMR_ENRICH_USAGE=1</code> (default), <code>emit_edge</code> fills missing tokens and cost from previews. Optional: <code>emitter.record_provider_usage(ProviderUsage(...))</code> before <code>emit_edge</code> for exact Anthropic usage.</p>
           <div class="code-block">
             <div class="code-block-header"><span>Python</span><button type="button" class="code-copy">Copy</button></div>
             <pre><span class="cmd">from</span> blamr_sdk.client <span class="cmd">import</span> BlamrEmitter
 
 emitter = BlamrEmitter(
-    workflow_id=<span class="str">"my-workflow"</span>,
-    agent_id=<span class="str">"my_agent"</span>,
+    <span class="str">"web-research"</span>,
+    <span class="str">"orchestrator"</span>,
     api_key=os.environ[<span class="str">"BLAMR_API_KEY"</span>],
     endpoint=os.environ.get(<span class="str">"BLAMR_ENDPOINT"</span>, <span class="str">"http://localhost:3001/v1"</span>),
 )
 run_id = emitter.start_run()
 emitter.emit_edge(
-    from_agent=<span class="str">"my_agent"</span>,
-    to_agent=<span class="str">"next_agent"</span>,
-    confidence_in=1.0,
-    confidence_out=0.9,
-    intent_delta=0.05,
-    influence_score=0.8,
-    input_preview=<span class="str">"user input"</span>,
-    output_preview=<span class="str">"agent output"</span>,
+    from_agent=<span class="str">"search_agent"</span>,
+    to_agent=<span class="str">"fetch_agent"</span>,
+    model=<span class="str">"claude-sonnet-4-6"</span>,
+    confidence_out=0.85,
+    input_preview=<span class="str">"user query"</span>,
+    output_preview=<span class="str">"search results"</span>,
 )
 emitter.complete_run(<span class="str">"success"</span>)</pre>
           </div>
