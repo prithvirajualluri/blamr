@@ -6,6 +6,7 @@ import { RunTraceBadge } from './BlamrStatusBadge';
 import { LayoutBadge } from './WorkflowTopology';
 import { explainHopSignals, contextForHop } from '../utils/signal-explain';
 import { ExplainText } from './ExplainText';
+import { CollapsibleSection } from './ui/CollapsibleSection';
 import {
   buildGraphEdges,
   buildGraphLayers,
@@ -27,6 +28,7 @@ export function CausalGraph({ run }: CausalGraphProps) {
   const [width, setWidth] = useState(700);
   const [tooltip, setTooltip] = useState<GraphTooltipData | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const graphLayers = useMemo(() => buildGraphLayers(run.trace_hops), [run.trace_hops]);
   const topology = useMemo(
@@ -61,6 +63,7 @@ export function CausalGraph({ run }: CausalGraphProps) {
 
   useEffect(() => {
     setSelectedAgent(null);
+    setPanelOpen(true);
   }, [run.id]);
 
   useEffect(() => {
@@ -76,6 +79,7 @@ export function CausalGraph({ run }: CausalGraphProps) {
 
   const showPanel = useCallback((agent: string) => {
     setSelectedAgent(agent);
+    setPanelOpen(true);
   }, []);
 
   const selectedBlame = selectedAgent ? run.blame.find((b) => b.agent === selectedAgent) : null;
@@ -269,14 +273,24 @@ export function CausalGraph({ run }: CausalGraphProps) {
       {tooltip && <GraphTooltip data={tooltip} run={run} />}
 
       {selectedAgent && (
-        <div className={`ag-panel${isRootSelected ? ' root' : isSucc ? ' success-ag' : ''}`}>
-          <div className="ag-title">
-            {isSucc && <span style={{ color: 'var(--grL)' }}>✓ </span>}
-            {selectedAgent}
-            <RunTraceBadge tracing={Boolean(selectedSpan)} />
-            {isRootSelected && <Badge variant="red">Root cause</Badge>}
-            {isSucc && <Badge variant="grn">Healthy</Badge>}
-          </div>
+        <div className={`ag-panel${isRootSelected ? ' root' : isSucc ? ' success-ag' : ''}${panelOpen ? '' : ' minimized'}`}>
+          <button
+            type="button"
+            className="ag-panel-toggle"
+            onClick={() => setPanelOpen((v) => !v)}
+            aria-expanded={panelOpen}
+          >
+            <span className="ag-title">
+              {isSucc && <span style={{ color: 'var(--grL)' }}>✓ </span>}
+              {selectedAgent}
+              <RunTraceBadge tracing={Boolean(selectedSpan)} />
+              {isRootSelected && <Badge variant="red">Root cause</Badge>}
+              {isSucc && <Badge variant="grn">Healthy</Badge>}
+            </span>
+            <span className="ag-panel-chevron" aria-hidden>{panelOpen ? '▴' : '▾'}</span>
+          </button>
+          {panelOpen && (
+            <>
           {selectedBlame && selectedBlame.pct > 0 && (
             <div className="kv">
               <span className="kvk">{isSucc ? 'Contribution' : 'Blame'}</span>
@@ -303,8 +317,7 @@ export function CausalGraph({ run }: CausalGraphProps) {
           )}
           {signalExplain && (
             <>
-              <div className="ag-justify">
-                <div className="ag-justify-title">Why confidence changed</div>
+              <CollapsibleSection title="Why confidence changed" className="ag-justify-collapsible">
                 <div><ExplainText text={signalExplain.confidenceSummary} /></div>
                 {signalExplain.confidenceFactors.length > 0 && (
                   <ul>
@@ -313,21 +326,22 @@ export function CausalGraph({ run }: CausalGraphProps) {
                     ))}
                   </ul>
                 )}
-              </div>
-              <div className="ag-justify">
-                <div className="ag-justify-title">Why intent is {signalExplain.intentPct}%</div>
+              </CollapsibleSection>
+              <CollapsibleSection title={`Why intent is ${signalExplain.intentPct}%`} className="ag-justify-collapsible">
                 <div><ExplainText text={signalExplain.intentSummary} /></div>
                 <ul>
                   {signalExplain.intentFactors.map((f) => (
                     <li key={f}><ExplainText text={f} /></li>
                   ))}
                 </ul>
-              </div>
+              </CollapsibleSection>
               {signalExplain.contributionNote && (
-                <div className="ag-justify" style={{ background: 'rgba(5, 150, 105, 0.06)', borderColor: 'rgba(5, 150, 105, 0.15)' }}>
-                  <div className="ag-justify-title" style={{ color: 'var(--grL)' }}>Contribution</div>
+                <CollapsibleSection
+                  title="Contribution"
+                  className="ag-justify-collapsible ag-justify-success"
+                >
                   <div><ExplainText text={signalExplain.contributionNote} /></div>
-                </div>
+                </CollapsibleSection>
               )}
             </>
           )}
@@ -345,6 +359,8 @@ export function CausalGraph({ run }: CausalGraphProps) {
           ) : isSucc ? (
             <div className="ag-reason" style={{ color: 'var(--grL)' }}>Agent completed successfully. No causal failures detected.</div>
           ) : null}
+            </>
+          )}
         </div>
       )}
     </div>

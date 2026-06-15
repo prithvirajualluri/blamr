@@ -27,6 +27,20 @@ export interface PlatformOverview {
   accuracy: { avg: number };
 }
 
+export interface IntegrationRecommendation {
+  id: string;
+  severity: 'warn' | 'critical';
+  title: string;
+  detail: string;
+}
+
+export interface WorkflowIntegrationHealth {
+  level: 'healthy' | 'attention' | 'critical';
+  recommendations: IntegrationRecommendation[];
+  runs_analyzed: number;
+  edges_analyzed: number;
+}
+
 export interface WorkflowApiRow {
   id: string;
   name: string;
@@ -40,6 +54,7 @@ export interface WorkflowApiRow {
   last_run_at: number;
   blamr_status: BlamrConnectionStatus;
   agents: Array<{ agent_id: string; workflow_id: string; last_seen_at: number; blamr_status: BlamrConnectionStatus }>;
+  integration_health: WorkflowIntegrationHealth;
 }
 
 export interface AgentApiRow {

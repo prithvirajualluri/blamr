@@ -8,6 +8,7 @@ import { ApiBanner, EmptyState } from '../components/ApiBanner';
 import { accCol, fC, fM, fT, sumHopCosts } from '../utils/format';
 import { explainConfidenceChange, explainIntentPreserved, contextForHop, resolveDisplayDrift } from '../utils/signal-explain';
 import { ExplainText } from '../components/ExplainText';
+import { CollapsibleSection } from '../components/ui/CollapsibleSection';
 import { computeBlamrStatus } from '../utils/blamr-status';
 import { IconChart, IconDollar, IconClock, IconTok } from '../components/icons';
 import type { TraceHop } from '@blamr/types';
@@ -218,7 +219,7 @@ function TraceTab({ run }: { run: RunDetail }) {
         <div className="panel-hdr">
           <IconChart /> Execution trace
           <LayoutBadge layout={run.layout} />
-          <span className="panel-sub">{hops.length} hops · {fM(run.total_ms)} wall · {fC(hopCostSum)} LLM cost</span>
+          <span className="panel-sub">{hops.length} hops · {fM(run.total_ms)} wall · {fC(hopCostSum)} LLM cost · click a hop to expand</span>
         </div>
         {hops.map((hop) => (
           <TraceHopCard
@@ -262,6 +263,7 @@ function TraceHopCard({
   maxMs: number;
   isRoot: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const bc = isRoot ? '#DC2626' : '#0891B2';
   const hopCtx = contextForHop(allHops, hop, workflowId, domainType);
   const mlHint =
@@ -272,41 +274,69 @@ function TraceHopCard({
   const confExplain = explainConfidenceChange(hop, mlHint, hopCtx);
   const intentExplain = explainIntentPreserved(hop, mlHint, hopCtx);
   const reconciledHop = hopCtx.allHops?.find((h) => h.hop_index === hop.hop_index) ?? hop;
+  const hasDetail =
+    confExplain.factors.length > 0
+    || confExplain.summary
+    || intentExplain.factors.length > 0
+    || hop.input_preview
+    || hop.output_preview;
+
   return (
-    <div className="trace-hop-card">
-      <div className="trace-hop-hdr">
-        <div className="trace-dot" style={{ background: isRoot ? 'var(--re)' : 'var(--cy)' }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="trace-agent">{hop.agent}</span>
-            <span className="trace-type">{hop.type}</span>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--mu)' }}>hop {hop.hop_index}</span>
-            {displayDrift && (
-              <Badge variant={driftBadgeVariant(displayDrift)}>
-                {driftLabel(displayDrift)}
-                {hop.drift_score != null ? ` ${Math.round(hop.drift_score * 100)}%` : ''}
-              </Badge>
+    <div className={`trace-hop-card${open ? ' open' : ''}`}>
+      <button
+        type="button"
+        className="trace-hop-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <div className="trace-hop-hdr">
+          <div className="trace-dot" style={{ background: isRoot ? 'var(--re)' : 'var(--cy)' }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="trace-agent">{hop.agent}</span>
+              <span className="trace-type">{hop.type}</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--mu)' }}>hop {hop.hop_index}</span>
+              {displayDrift && (
+                <Badge variant={driftBadgeVariant(displayDrift)}>
+                  {driftLabel(displayDrift)}
+                  {hop.drift_score != null ? ` ${Math.round(hop.drift_score * 100)}%` : ''}
+                </Badge>
+              )}
+              <RunTraceBadge tracing />
+            </div>
+            <div className="trace-meta" style={{ marginTop: 4 }}>
+              <span>→ {hop.to_agent}</span>
+              <span><IconClock />{fM(hop.ms)}</span>
+              <span>conf {reconciledHop.confidence_in.toFixed(2)} → {hop.confidence_out.toFixed(2)}</span>
+              <span>intent preserved {intentExplain.pct}%</span>
+            </div>
+            {!open && (
+              <div className="trace-meta trace-meta-compact" style={{ marginTop: 2 }}>
+                <span><IconTok />{fT(hop.tokens_in)} in / {fT(hop.tokens_out)} out</span>
+                <span><IconDollar />{fC(hop.cost)}</span>
+                {hasDetail && <span className="trace-expand-hint">Click to expand</span>}
+              </div>
             )}
-            <RunTraceBadge tracing />
           </div>
-          <div className="trace-meta" style={{ marginTop: 4 }}>
-            <span>→ {hop.to_agent}</span>
-            <span><IconClock />{fM(hop.ms)}</span>
+          <span className="trace-chevron" aria-hidden>{open ? '▴' : '▾'}</span>
+        </div>
+      </button>
+
+      {open && (
+        <div className="trace-hop-body">
+          <div className="trace-meta" style={{ marginTop: 4, paddingLeft: 18 }}>
             <span><IconTok />{fT(hop.tokens_in)} in / {fT(hop.tokens_out)} out</span>
             <span><IconDollar />{fC(hop.cost)}</span>
             <span className="mono">{hop.model}</span>
           </div>
-          <div className="trace-meta" style={{ marginTop: 2 }}>
-            <span>conf {reconciledHop.confidence_in.toFixed(2)} → {hop.confidence_out.toFixed(2)}</span>
+          <div className="trace-meta" style={{ marginTop: 2, paddingLeft: 18 }}>
             <span>influence {hop.influence_score.toFixed(2)}</span>
             <span>intent Δ {hop.intent_delta.toFixed(2)}</span>
-            <span>intent preserved {intentExplain.pct}%</span>
           </div>
           {(confExplain.factors.length > 0 || confExplain.summary) && (
             <div className="trace-justify" style={{ marginTop: 6 }}>
-              <div style={{ marginBottom: 8 }}>
-                <strong style={{ color: 'var(--cy)' }}>Why confidence changed — </strong>
-                <ExplainText text={confExplain.summary} />
+              <CollapsibleSection title="Why confidence changed">
+                <div><ExplainText text={confExplain.summary} /></div>
                 {confExplain.factors.length > 0 && (
                   <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
                     {confExplain.factors.map((f) => (
@@ -314,42 +344,44 @@ function TraceHopCard({
                     ))}
                   </ul>
                 )}
-              </div>
-              <div>
-                <strong style={{ color: 'var(--cy)' }}>Why intent is {intentExplain.pct}% — </strong>
-                <ExplainText text={intentExplain.summary} />
+              </CollapsibleSection>
+              <CollapsibleSection
+                title={`Why intent is ${intentExplain.pct}%`}
+                className="trace-justify-nested"
+              >
+                <div><ExplainText text={intentExplain.summary} /></div>
                 <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
                   {intentExplain.factors.map((f) => (
                     <li key={f}><ExplainText text={f} /></li>
                   ))}
                 </ul>
-              </div>
+              </CollapsibleSection>
             </div>
           )}
-        </div>
-      </div>
-      <div className="trace-bar-wrap" style={{ marginTop: 8, paddingLeft: 18 }}>
-        <div className="trace-bar-bg"><div className="trace-bar-fill" style={{ width: `${Math.round((hop.ms / maxMs) * 100)}%`, background: bc }} /></div>
-        <span className="trace-dur">{fM(hop.ms)}</span>
-      </div>
-      {(hop.input_preview || hop.output_preview) ? (
-        <div className="trace-io-grid">
-          {hop.input_preview && (
-            <div className="trace-io-block">
-              <div className="trace-io-lbl">Input</div>
-              <pre className="trace-io-pre">{hop.input_preview}</pre>
+          <div className="trace-bar-wrap" style={{ marginTop: 8, paddingLeft: 18 }}>
+            <div className="trace-bar-bg"><div className="trace-bar-fill" style={{ width: `${Math.round((hop.ms / maxMs) * 100)}%`, background: bc }} /></div>
+            <span className="trace-dur">{fM(hop.ms)}</span>
+          </div>
+          {(hop.input_preview || hop.output_preview) ? (
+            <div className="trace-io-grid">
+              {hop.input_preview && (
+                <div className="trace-io-block">
+                  <div className="trace-io-lbl">Input</div>
+                  <pre className="trace-io-pre">{hop.input_preview}</pre>
+                </div>
+              )}
+              {hop.output_preview && (
+                <div className="trace-io-block">
+                  <div className="trace-io-lbl">Output</div>
+                  <pre className="trace-io-pre">{hop.output_preview}</pre>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 8, paddingLeft: 18 }}>
+              No input/output captured for this hop. Re-run with an updated SDK agent to record I/O previews.
             </div>
           )}
-          {hop.output_preview && (
-            <div className="trace-io-block">
-              <div className="trace-io-lbl">Output</div>
-              <pre className="trace-io-pre">{hop.output_preview}</pre>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 8, paddingLeft: 18 }}>
-          No input/output captured for this hop. Re-run with an updated SDK agent to record I/O previews.
         </div>
       )}
     </div>

@@ -1,16 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { computeBlamrStatus, type AgentConnectionSummary, type BlamrConnectionStatus } from '@blamr/types';
+import { In, Repository } from 'typeorm';
+import {
+  computeBlamrStatus,
+  type AgentConnectionSummary,
+  type BlamrConnectionStatus,
+  type WorkspaceSettings,
+} from '@blamr/types';
 import { WorkflowRunEntity } from '../../entities/workflow-run.entity';
+import { WorkspaceEntity } from '../../entities/workspace.entity';
+import { BlameReportEntity } from '../../entities/blame-report.entity';
+import { ClickHouseService } from '../../services/clickhouse.service';
+import {
+  analyzeIntegrationHealth,
+  type EdgeSample,
+  type DriftHopSample,
+  type WorkflowIntegrationHealth,
+} from './integration-health';
 
 export type WorkflowHealth = 'all' | 'critical' | 'warning' | 'fair' | 'healthy';
+
+const INTEGRATION_HEALTH_RUNS = 15;
 
 @Injectable()
 export class WorkflowsService {
   constructor(
     @InjectRepository(WorkflowRunEntity)
     private readonly runRepo: Repository<WorkflowRunEntity>,
+    @InjectRepository(WorkspaceEntity)
+    private readonly workspaceRepo: Repository<WorkspaceEntity>,
+    @InjectRepository(BlameReportEntity)
+    private readonly blameRepo: Repository<BlameReportEntity>,
+    private readonly clickhouse: ClickHouseService,
   ) {}
 
   private healthHaving(health: WorkflowHealth): string | null {
@@ -119,6 +140,10 @@ export class WorkflowsService {
       }
     }
 
+    const workspace = await this.workspaceRepo.findOne({ where: { id: workspaceId } });
+    const settings = (workspace?.settings ?? {}) as WorkspaceSettings;
+    const healthByWf = await this.buildIntegrationHealth(workspaceId, ids, settings);
+
     const workflows = rows.map((row) => {
       const lastRunAt = Number(row.last_run_at);
       const blamr_status: BlamrConnectionStatus = computeBlamrStatus(lastRunAt);
@@ -138,10 +163,107 @@ export class WorkflowsService {
         last_run_at: lastRunAt,
         blamr_status,
         agents,
+        integration_health: healthByWf.get(row.id) ?? {
+          level: 'healthy' as const,
+          recommendations: [],
+          runs_analyzed: 0,
+          edges_analyzed: 0,
+        },
       };
     });
 
     return { workflows, total };
+  }
+
+  private async buildIntegrationHealth(
+    workspaceId: string,
+    workflowIds: string[],
+    settings: WorkspaceSettings,
+  ): Promise<Map<string, WorkflowIntegrationHealth>> {
+    const result = new Map<string, WorkflowIntegrationHealth>();
+    if (!workflowIds.length) return result;
+
+    const recentRuns = await this.runRepo.query<
+      Array<{ workflow_id: string; id: string; status: string }>
+    >(
+      `SELECT workflow_id, id, status
+       FROM (
+         SELECT workflow_id, id, status,
+           ROW_NUMBER() OVER (PARTITION BY workflow_id ORDER BY started_at DESC) AS rn
+         FROM workflow_runs
+         WHERE workspace_id = $1 AND workflow_id = ANY($2)
+       ) sub
+       WHERE rn <= $3`,
+      [workspaceId, workflowIds, INTEGRATION_HEALTH_RUNS],
+    );
+
+    const runIds = recentRuns.map((r) => r.id);
+    let edgesByRun = new Map<string, import('@blamr/types').CausalEdge[]>();
+    if (runIds.length) {
+      try {
+        edgesByRun = await this.clickhouse.getEdgesByRunIds(runIds);
+      } catch {
+        /* ClickHouse unavailable */
+      }
+    }
+
+    const blameReports = runIds.length
+      ? await this.blameRepo.find({
+          where: { run_id: In(runIds) },
+          select: ['run_id', 'hop_analysis'],
+        })
+      : [];
+
+    const runWorkflow = new Map(recentRuns.map((r) => [r.id, r.workflow_id]));
+    const successRunIds = new Set(
+      recentRuns.filter((r) => r.status === 'success').map((r) => r.id),
+    );
+
+    for (const wfId of workflowIds) {
+      const runs = recentRuns
+        .filter((r) => r.workflow_id === wfId)
+        .map((r) => ({ id: r.id, status: r.status }));
+
+      const edges: EdgeSample[] = [];
+      for (const run of runs) {
+        for (const e of edgesByRun.get(run.id) ?? []) {
+          edges.push({
+            run_id: e.run_id,
+            from_agent: e.from_agent,
+            to_agent: e.to_agent,
+            confidence_in: e.confidence_in,
+            confidence_out: e.confidence_out,
+            intent_delta: e.intent_delta,
+            input_preview: e.input_preview ?? '',
+            output_preview: e.output_preview ?? '',
+            call_type: e.call_type,
+          });
+        }
+      }
+
+      const driftHops: DriftHopSample[] = [];
+      for (const br of blameReports) {
+        if (!successRunIds.has(br.run_id)) continue;
+        if (runWorkflow.get(br.run_id) !== wfId) continue;
+        for (const h of br.hop_analysis ?? []) {
+          driftHops.push({
+            run_id: br.run_id,
+            hop_index: h.hop_index,
+            drift_type: h.drift_type,
+            drift_score: h.drift_score,
+          });
+        }
+      }
+
+      const profile = settings.workflow_configs?.[wfId];
+      const hasWorkflowGate =
+        profile?.confidence_accept_level != null
+        || settings.default_confidence_accept_level != null;
+
+      result.set(wfId, analyzeIntegrationHealth(edges, runs, driftHops, hasWorkflowGate));
+    }
+
+    return result;
   }
 
   async accuracyHistory(workflowId: string, workspaceId?: string) {
