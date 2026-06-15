@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="assets/blamr_favicon.svg" />
+  <meta name="theme-color" content="#070D1A" />
+  <title>blamr — Causal Intelligence for Multi-Agent AI</title>
+  <meta name="description" content="Open-source causal intelligence for multi-agent AI. Span tools log what happened; blamr traces handoffs, attributes blame, and explains failures. Self-hosted — Docker, Helm, Ollama." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="layout.css" />
+  <link rel="stylesheet" href="graphics.css" />
+</head>
+<body>
+  <div class="landing">
+    <header class="landing-nav">
+      <div class="landing-nav-inner">
+      <a class="landing-nav-brand" href="#top">
+        <img src="assets/blamr_logo.svg" alt="blamr" width="136" height="30" />
+      </a>
+      <nav class="landing-nav-links">
+        <a href="#how-it-works" class="hide-sm">How it works</a>
+        <a href="#philosophy" class="hide-sm">Philosophy</a>
+        <a href="#examples" class="hide-sm">Examples</a>
+        <a href="#compare" class="hide-sm">Compare</a>
+        <a href="#deploy" class="hide-sm">Deploy</a>
+        <a href="docs.html" class="hide-sm">Docs</a>
+        <a href="causal-monitoring.html" class="hide-sm">Causal monitoring</a>
+        <a class="landing-btn landing-btn-ghost hide-sm" href="/app">Open console</a>
+        <a class="landing-btn landing-btn-primary" href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      </div>
+    </header>
+
+    <section class="landing-hero" id="top">
+      <div class="landing-eyebrow">
+        <img src="assets/blamr_favicon.svg" width="16" height="16" alt="" aria-hidden="true" />
+        Open source · Self-hosted
+      </div>
+      <img class="landing-hero-logo" src="assets/blamr_logo.svg" alt="blamr — causal intelligence" width="320" height="70" />
+      <h1>Causal intelligence for multi-agent AI</h1>
+      <p class="landing-hero-lead">
+        Span tools log <strong>what happened</strong>. blamr traces handoffs, attributes blame, and explains
+        <strong>which agent caused the failure — and why</strong>. Not observability. Causal intelligence.
+      </p>
+      <div class="landing-cta-row">
+        <a class="landing-btn landing-btn-primary" href="docs.html">Install &amp; quick start</a>
+        <a class="landing-btn landing-btn-ghost" href="#how-it-works">How it works</a>
+        <a class="landing-btn landing-btn-ghost" href="#examples">See failure examples</a>
+        <a class="landing-btn landing-btn-ghost" href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">Star on GitHub</a>
+      </div>
+
+      <!-- Animated causal graph: forward flow + backward blame -->
+      <div class="hero-viz-wrap reveal">
+        <div class="hero-viz" role="img" aria-label="Animated diagram: four agents in a chain, failure at the last agent, blame propagates backward to the root cause at 89%">
+          <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="m-cy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M1 1 L9 5 L1 9" fill="none" stroke="#0891B2" stroke-width="1.5"/>
+              </marker>
+              <marker id="m-re" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M1 1 L9 5 L1 9" fill="none" stroke="#DC2626" stroke-width="1.5"/>
+              </marker>
+            </defs>
+            <text x="400" y="22" text-anchor="middle" fill="#64748B" font-family="ui-monospace, monospace" font-size="11">Multi-agent run — all spans green, output wrong</text>
+            <!-- forward causal edges -->
+            <line x1="130" y1="110" x2="250" y2="110" stroke="#0891B2" stroke-width="2" class="edge-forward" marker-end="url(#m-cy)"/>
+            <line x1="290" y1="110" x2="410" y2="110" stroke="#0891B2" stroke-width="2" class="edge-forward" style="animation-delay:0.3s" marker-end="url(#m-cy)"/>
+            <line x1="450" y1="110" x2="570" y2="110" stroke="#0891B2" stroke-width="2" class="edge-forward" style="animation-delay:0.6s" marker-end="url(#m-cy)"/>
+            <!-- backward blame edges -->
+            <path d="M600 130 Q400 175 120 130" fill="none" stroke="#DC2626" stroke-width="2.5" class="edge-blame" marker-end="url(#m-re)" opacity="0.85"/>
+            <path d="M560 95 Q400 55 140 95" fill="none" stroke="#DC2626" stroke-width="1.5" class="edge-blame" style="animation-delay:0.5s" marker-end="url(#m-re)" opacity="0.5"/>
+            <!-- agents -->
+            <g class="node-pulse-strong">
+              <circle cx="100" cy="110" r="34" fill="rgba(220,38,38,0.15)" stroke="#DC2626" stroke-width="2.5"/>
+              <circle cx="100" cy="110" r="42" fill="none" stroke="#DC2626" stroke-width="1" stroke-dasharray="4 4" opacity="0.45"/>
+            </g>
+            <circle cx="270" cy="110" r="28" fill="#0F1C30" stroke="#0891B2" stroke-width="1.5"/>
+            <circle cx="430" cy="110" r="28" fill="#0F1C30" stroke="#1E3050" stroke-width="1.5"/>
+            <g class="fail-x">
+              <circle cx="590" cy="110" r="28" fill="rgba(220,38,38,0.12)" stroke="#DC2626" stroke-width="2"/>
+            </g>
+            <text x="100" y="98" text-anchor="middle" fill="#FCA5A5" font-family="ui-monospace, monospace" font-size="9" font-weight="600">intent</text>
+            <text x="100" y="112" text-anchor="middle" fill="#FCA5A5" font-family="ui-monospace, monospace" font-size="9" font-weight="600">classifier</text>
+            <text x="270" y="114" text-anchor="middle" fill="#22D3EE" font-family="ui-monospace, monospace" font-size="10">policy</text>
+            <text x="430" y="114" text-anchor="middle" fill="#94A3B8" font-family="ui-monospace, monospace" font-size="10">writer</text>
+            <text x="590" y="116" text-anchor="middle" fill="#FCA5A5" font-family="ui-monospace, monospace" font-size="14" font-weight="700">✗</text>
+            <g class="blame-label">
+              <rect x="68" y="148" width="64" height="22" rx="6" fill="#DC2626"/>
+              <text x="100" y="163" text-anchor="middle" fill="#fff" font-family="ui-monospace, monospace" font-size="11" font-weight="700">89% blame</text>
+            </g>
+            <text x="590" y="158" text-anchor="middle" fill="#64748B" font-family="ui-monospace, monospace" font-size="9">symptom (3%)</text>
+            <text x="400" y="205" text-anchor="middle" fill="#64748B" font-size="10">Span tracers stop at the red X · blamr traces blame backward to the root</text>
+          </svg>
+          <div class="hero-viz-caption">
+            <span><i class="legend-dot cy"></i> Forward handoff (CausalEdge)</span>
+            <span><i class="legend-dot re"></i> Backward blame propagation</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="landing-stats reveal">
+        <div class="landing-stat">
+          <div class="landing-stat-val re">88%</div>
+          <div class="landing-stat-lbl">of AI agents fail in production</div>
+        </div>
+        <div class="landing-stat">
+          <div class="landing-stat-val re">17%</div>
+          <div class="landing-stat-lbl">accuracy of existing root-cause tools</div>
+        </div>
+        <div class="landing-stat">
+          <div class="landing-stat-val">70%</div>
+          <div class="landing-stat-lbl">of MAS maintenance is debugging</div>
+        </div>
+        <div class="landing-stat">
+          <div class="landing-stat-val re">0</div>
+          <div class="landing-stat-lbl">production OSS tools for causal attribution</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="landing-section alt reveal">
+      <div class="landing-section-hdr">
+        <h2>How blamr works</h2>
+        <p>Every agent handoff emits a CausalEdge — confidence, intent drift, I/O previews. Workers build a causal graph and rank who actually caused the failure.</p>
+      </div>
+      <div class="how-grid">
+        <div class="how-step">
+          <div class="how-step-num">STEP 01</div>
+          <h4>Instrument handoffs</h4>
+          <p>SDK, MCP proxy, or framework adapter emits edges at runtime — not reconstructed from logs later.</p>
+          <svg viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="10" y="44" width="50" height="32" rx="6" fill="#0F1C30" stroke="#0891B2" stroke-width="1.5"/>
+            <rect x="95" y="44" width="50" height="32" rx="6" fill="#0F1C30" stroke="#1E3050" stroke-width="1.5"/>
+            <rect x="180" y="44" width="50" height="32" rx="6" fill="#0F1C30" stroke="#1E3050" stroke-width="1.5"/>
+            <line x1="60" y1="60" x2="95" y2="60" stroke="#0891B2" stroke-width="2" class="edge-forward"/>
+            <line x1="145" y1="60" x2="180" y2="60" stroke="#0891B2" stroke-width="2" class="edge-forward" style="animation-delay:0.4s"/>
+            <circle r="5" fill="#22D3EE" class="packet"><animateMotion dur="2s" repeatCount="indefinite" path="M60,60 L95,60"/></circle>
+            <circle r="5" fill="#22D3EE" class="packet packet-2"><animateMotion dur="2s" repeatCount="indefinite" path="M145,60 L180,60"/></circle>
+            <text x="35" y="62" text-anchor="middle" fill="#94A3B8" font-size="8" font-family="monospace">A1</text>
+            <text x="120" y="62" text-anchor="middle" fill="#94A3B8" font-size="8" font-family="monospace">A2</text>
+            <text x="205" y="62" text-anchor="middle" fill="#94A3B8" font-size="8" font-family="monospace">A3</text>
+            <text x="120" y="105" text-anchor="middle" fill="#64748B" font-size="9">CausalEdge per hop</text>
+          </svg>
+        </div>
+        <div class="how-step">
+          <div class="how-step-num">STEP 02</div>
+          <h4>Build causal graph</h4>
+          <p>Ingest stores edges; workers compute semantic drift, Shapley blame scores, and confidence gates.</p>
+          <svg viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="50" cy="60" r="22" fill="rgba(220,38,38,0.2)" stroke="#DC2626" stroke-width="2" class="node-pulse-strong"/>
+            <circle cx="120" cy="35" r="16" fill="#0F1C30" stroke="#0891B2"/>
+            <circle cx="120" cy="85" r="16" fill="#0F1C30" stroke="#1E3050"/>
+            <circle cx="190" cy="60" r="16" fill="rgba(220,38,38,0.15)" stroke="#DC2626"/>
+            <line x1="72" y1="52" x2="104" y2="40" stroke="#DC2626" stroke-width="1.5" class="edge-blame"/>
+            <line x1="72" y1="68" x2="104" y2="80" stroke="#DC2626" stroke-width="1.2" class="edge-blame" style="animation-delay:0.3s"/>
+            <line x1="136" y1="42" x2="174" y2="55" stroke="#0891B2" stroke-width="1.2" class="edge-forward"/>
+            <line x1="136" y1="78" x2="174" y2="65" stroke="#475569" stroke-width="1"/>
+            <text x="50" y="64" text-anchor="middle" fill="#FCA5A5" font-size="8" font-family="monospace">89%</text>
+            <text x="120" y="108" text-anchor="middle" fill="#64748B" font-size="9">Shapley blame</text>
+          </svg>
+        </div>
+        <div class="how-step">
+          <div class="how-step-num">STEP 03</div>
+          <h4>Explain root cause</h4>
+          <p>Blame report + intent trace show which agent broke the mission and the fix path — in seconds.</p>
+          <svg viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="20" y="20" width="200" height="80" rx="8" fill="#0D1627" stroke="#1E3050"/>
+            <text x="35" y="42" fill="#64748B" font-size="8" font-family="monospace">$ blamr blame --run a1b2</text>
+            <text x="35" y="58" fill="#FCA5A5" font-size="9" font-family="monospace">intent_classifier  89%  ROOT</text>
+            <text x="35" y="72" fill="#94A3B8" font-size="9" font-family="monospace">policy_lookup      8%</text>
+            <text x="35" y="86" fill="#94A3B8" font-size="9" font-family="monospace">response_writer    3%</text>
+            <rect x="155" y="48" width="52" height="18" rx="4" fill="rgba(5,150,105,0.2)" stroke="#059669" stroke-width="1" class="node-pulse"/>
+            <text x="181" y="60" text-anchor="middle" fill="#34D399" font-size="8" font-weight="600">FIX →</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="signal-demo reveal">
+        <div class="signal-card">
+          <h4>confidence_out</h4>
+          <p>Certainty per hop — catch inflation when hedges become facts</p>
+          <svg viewBox="0 0 200 36" width="100%" aria-hidden="true" style="margin-top:8px">
+            <text x="0" y="10" fill="#64748B" font-size="8" font-family="monospace">0.43</text>
+            <rect x="0" y="16" width="200" height="8" rx="4" fill="#1E3050"/>
+            <rect x="0" y="16" width="200" height="8" rx="4" fill="#DC2626" class="meter-fill danger" style="transform-origin:left center;transform-box:fill-box"/>
+            <text x="170" y="10" fill="#FCA5A5" font-size="8" font-family="monospace">0.95</text>
+          </svg>
+        </div>
+        <div class="signal-card">
+          <h4>intent_delta</h4>
+          <p>Goal drift — see where the mission dissolved across hops</p>
+          <svg viewBox="0 0 200 36" width="100%" aria-hidden="true" style="margin-top:8px">
+            <rect x="0" y="16" width="200" height="8" rx="4" fill="#1E3050"/>
+            <rect x="0" y="16" width="200" height="8" rx="4" fill="#0891B2" class="intent-bar"/>
+            <text x="0" y="10" fill="#22D3EE" font-size="8" font-family="monospace">97% preserved</text>
+            <text x="130" y="34" fill="#64748B" font-size="8" font-family="monospace">→ 28%</text>
+          </svg>
+        </div>
+        <div class="signal-card">
+          <h4>influence_score</h4>
+          <p>Downstream impact weight for blame propagation</p>
+          <svg viewBox="0 0 200 50" aria-hidden="true" style="margin-top:4px">
+            <circle cx="30" cy="25" r="14" fill="rgba(220,38,38,0.2)" stroke="#DC2626" class="node-pulse-strong"/>
+            <circle cx="100" cy="15" r="8" fill="#0F1C30" stroke="#0891B2"/>
+            <circle cx="100" cy="35" r="8" fill="#0F1C30" stroke="#475569"/>
+            <circle cx="170" cy="25" r="8" fill="#0F1C30" stroke="#475569"/>
+            <line x1="44" y1="22" x2="92" y2="16" stroke="#DC2626" stroke-width="2" opacity="0.8"/>
+            <line x1="44" y1="28" x2="92" y2="34" stroke="#DC2626" stroke-width="1.5" opacity="0.5"/>
+            <line x1="108" y1="20" x2="162" y2="24" stroke="#475569" stroke-width="1"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section id="philosophy" class="landing-section reveal">
+      <div class="landing-section-hdr">
+        <h2>Flight recorder vs crash investigator</h2>
+        <p>Existing tools — LangSmith, Langfuse, AgentOps — excel at recording spans, tokens, and latency. When a multi-agent workflow fails silently, they show you every step. They cannot tell you which step caused it.</p>
+      </div>
+
+      <div class="phil-viz-row reveal">
+        <div class="phil-viz">
+          <div class="phil-viz-label">Observability — flat span timeline</div>
+          <svg viewBox="0 0 360 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <text x="180" y="18" text-anchor="middle" fill="#64748B" font-size="10">All steps look successful ✓</text>
+            <rect x="20" y="40" width="70" height="12" rx="3" fill="#059669" opacity="0.7" class="span-bar"/>
+            <rect x="100" y="40" width="90" height="12" rx="3" fill="#059669" opacity="0.7" class="span-bar"/>
+            <rect x="200" y="40" width="60" height="12" rx="3" fill="#059669" opacity="0.7" class="span-bar"/>
+            <rect x="270" y="40" width="70" height="12" rx="3" fill="#059669" opacity="0.7" class="span-bar"/>
+            <text x="55" y="70" text-anchor="middle" fill="#64748B" font-size="8">A1</text>
+            <text x="145" y="70" text-anchor="middle" fill="#64748B" font-size="8">A2</text>
+            <text x="230" y="70" text-anchor="middle" fill="#64748B" font-size="8">A3</text>
+            <text x="305" y="70" text-anchor="middle" fill="#64748B" font-size="8">A4</text>
+            <text x="305" y="95" text-anchor="middle" fill="#FCA5A5" font-size="14">✗</text>
+            <text x="305" y="115" text-anchor="middle" fill="#64748B" font-size="9">Wrong output</text>
+            <text x="180" y="145" text-anchor="middle" fill="#64748B" font-size="10">You inspect A4 first — root cause may be A1</text>
+          </svg>
+        </div>
+        <div class="phil-viz highlight-viz">
+          <div class="phil-viz-label">blamr — causal graph + blame rank</div>
+          <svg viewBox="0 0 360 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="60" cy="80" r="24" fill="rgba(220,38,38,0.2)" stroke="#DC2626" stroke-width="2" class="node-pulse-strong"/>
+            <circle cx="150" cy="50" r="16" fill="#0F1C30" stroke="#0891B2"/>
+            <circle cx="150" cy="110" r="16" fill="#0F1C30" stroke="#475569"/>
+            <circle cx="280" cy="80" r="16" fill="rgba(220,38,38,0.12)" stroke="#DC2626"/>
+            <line x1="84" y1="72" x2="134" y2="55" stroke="#DC2626" stroke-width="2" class="edge-blame" marker-end="url(#m-re2)"/>
+            <line x1="84" y1="88" x2="134" y2="105" stroke="#DC2626" stroke-width="1.5" class="edge-blame" style="animation-delay:0.4s"/>
+            <line x1="166" y1="55" x2="264" y2="75" stroke="#0891B2" stroke-width="1.5" class="edge-forward"/>
+            <line x1="166" y1="105" x2="264" y2="85" stroke="#475569" stroke-width="1"/>
+            <defs><marker id="m-re2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#DC2626"/></marker></defs>
+            <text x="60" y="84" text-anchor="middle" fill="#FCA5A5" font-size="9" font-weight="700">89%</text>
+            <text x="280" y="84" text-anchor="middle" fill="#FCA5A5" font-size="11">✗</text>
+            <text x="180" y="145" text-anchor="middle" fill="#22D3EE" font-size="10">Blame flows backward to true root cause</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="landing-philosophy">
+        <div class="landing-phil-card">
+          <h3>Observability tools</h3>
+          <p class="big">What did each agent do?</p>
+          <p>Flat spans and traces. Manual log inspection. The agent that outputs the wrong answer gets investigated first — even when the root cause was six hops upstream.</p>
+        </div>
+        <div class="landing-phil-card highlight">
+          <h3>blamr</h3>
+          <p class="big">Which agent caused this outcome?</p>
+          <p>Causal edges at every handoff. Backward blame propagation with Shapley scoring. Confidence and intent tracked across hops — so silent failures surface before they ship.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section">
+      <div class="landing-section-hdr">
+        <h2>The structural gap</h2>
+        <p>These are not missing features waiting for the next Langfuse release. Causality requires runtime instrumentation at the handoff layer — not post-hoc reconstruction from linear traces.</p>
+      </div>
+      <div class="landing-gap-grid">
+        <div class="landing-gap-item"><span>×</span><div><h4>Which agent caused this wrong output?</h4><p>Traces show every step. None rank agents by causal contribution. With 8+ agents, you guess.</p></div></div>
+        <div class="landing-gap-item"><span>×</span><div><h4>Confidence inflation across handoffs</h4><p>Agent 2 hedges; Agent 5 states it as fact. Manufactured certainty is invisible in span logs.</p></div></div>
+        <div class="landing-gap-item"><span>×</span><div><h4>Intent decay on long chains</h4><p>The original goal erodes hop by hop. By step 8 you are confidently answering the wrong question.</p></div></div>
+        <div class="landing-gap-item"><span>×</span><div><h4>Symptom vs root cause</h4><p>The agent that outputs the wrong answer gets blamed — not the bad decision six hops earlier.</p></div></div>
+      </div>
+    </section>
+
+    <section id="examples" class="landing-section alt">
+      <div class="landing-section-hdr">
+        <h2>Five production failure patterns</h2>
+        <p>Real scenarios from customer support, research, sales intelligence, finance, and autonomous analysis — from single-hop misclassification to full semantic drift across eight agents.</p>
+      </div>
+      <div class="landing-examples">
+
+        <details class="landing-example" open>
+          <summary>
+            <span class="landing-example-num">01 · Simple</span>
+            <div>
+              <div class="landing-example-title">Wrong agent blamed — misclassification at hop 1</div>
+              <div class="landing-example-sub">Customer support: intent_classifier → policy_lookup → response_writer. User asks about leave balance; response talks about payroll. All agents log success.</div>
+            </div>
+          </summary>
+          <div class="landing-example-body">
+            <div class="landing-example-cols">
+              <div class="landing-example-col without"><h5>Without blamr</h5><p>You tweak response_writer for two hours. You add a manual override. The root cause at intent_classifier is never fixed.</p></div>
+              <div class="landing-example-col with"><h5>With blamr</h5><p>blamr ranks intent_classifier at 89% blame — classified leave as payroll with 0.91 confidence. Fix: few-shot leave examples on the classifier.</p></div>
+            </div>
+            <div class="landing-example-fix"><strong>Fix path:</strong> Add few-shot leave examples to intent_classifier — not the writer.</div>
+          </div>
+        </details>
+
+        <details class="landing-example">
+          <summary>
+            <span class="landing-example-num">02 · Moderate</span>
+            <div>
+              <div class="landing-example-title">Silent confidence inflation</div>
+              <div class="landing-example-sub">Research workflow: web_searcher hedges at 0.43; four hops later the report states "40% — confirmed" at 0.95. No errors, all green spans.</div>
+            </div>
+          </summary>
+          <div class="landing-example-body">
+            <div class="landing-example-cols">
+              <div class="landing-example-col without"><h5>Without blamr</h5><p>The report looks authoritative. Standard observability shows 200 OK on every hop. Nobody catches it until reputational damage.</p></div>
+              <div class="landing-example-col with"><h5>With blamr</h5><p>Confidence trace shows summarizer inflated 0.43 → 0.71 by dropping the hedge. Root cause: hop 2 uncertainty stripping.</p></div>
+            </div>
+            <div class="landing-example-fix"><strong>Fix path:</strong> Preserve uncertainty language in summarizer prompt and gate on confidence decay.</div>
+          </div>
+        </details>
+
+        <details class="landing-example">
+          <summary>
+            <span class="landing-example-num">03 · Moderate+</span>
+            <div>
+              <div class="landing-example-title">Parallel agent conflict</div>
+              <div class="landing-example-sub">SDR pipeline: firmographic_agent says HIGH; intent_signal_agent says LOW. Orchestrator picks LOW. Three weeks later it was a $200K deal.</div>
+            </div>
+          </summary>
+          <div class="landing-example-body">
+            <div class="landing-example-cols">
+              <div class="landing-example-col without"><h5>Without blamr</h5><p>Both agents succeeded. You debug the agents — but neither was wrong. The orchestrator policy was.</p></div>
+              <div class="landing-example-col with"><h5>With blamr</h5><p>Conflict report: orchestrator weighted recency over firmographic ICP match. Fix is domain signal weighting — not agent prompts.</p></div>
+            </div>
+            <div class="landing-example-fix"><strong>Fix path:</strong> Enterprise ICP leads should overweight firmographic signals in orchestrator policy.</div>
+          </div>
+        </details>
+
+        <details class="landing-example">
+          <summary>
+            <span class="landing-example-num">04 · Complex</span>
+            <div>
+              <div class="landing-example-title">Silent data mutation</div>
+              <div class="landing-example-sub">Invoice pipeline: OCR extracts "1,40,000" (Indian notation). entity_extractor parses ₹1,400,000. Six agents log success; payment goes out 10× wrong.</div>
+            </div>
+          </summary>
+          <div class="landing-example-body">
+            <div class="landing-example-cols">
+              <div class="landing-example-col without"><h5>Without blamr</h5><p>Finance finds it in the bank statement. Manual audit of every hop. No exception was ever thrown.</p></div>
+              <div class="landing-example-col with"><h5>With blamr</h5><p>Causal graph flags entity_extractor at 94% blame — comma stripping misread Indian vs Western notation at hop 2.</p></div>
+            </div>
+            <div class="landing-example-fix"><strong>Fix path:</strong> Detect Indian number notation and emit low-confidence when comma placement is ambiguous.</div>
+          </div>
+        </details>
+
+        <details class="landing-example">
+          <summary>
+            <span class="landing-example-num">05 · Advanced</span>
+            <div>
+              <div class="landing-example-title">Semantic drift across 8 agents</div>
+              <div class="landing-example-sub">Competitive analysis goal: "Workday Q2 APAC HCM." Final briefing covers SAP SuccessFactors globally. Polished output, wrong mission, zero errors.</div>
+            </div>
+          </summary>
+          <div class="landing-example-body">
+            <div class="landing-example-cols">
+              <div class="landing-example-col without"><h5>Without blamr</h5><p>You re-run the workflow. You tweak report_writer. Drift started at hop 4 — you never find it in logs.</p></div>
+              <div class="landing-example-col with"><h5>With blamr</h5><p>Intent map: content_aggregator at 61% — SAP content weighted by volume. Counterfactual: relevance filter restores 89% intent.</p></div>
+            </div>
+            <div class="landing-example-fix"><strong>Fix path:</strong> Add intent relevance scoring to content_aggregator; filter web_searcher_2 to Workday-only sources.</div>
+          </div>
+        </details>
+
+      </div>
+    </section>
+
+    <section id="compare" class="landing-section">
+      <div class="landing-section-hdr">
+        <h2>Capability comparison</h2>
+        <p>What existing tools record vs what blamr attributes — at a glance.</p>
+      </div>
+      <div class="landing-table-wrap">
+        <table class="landing-table">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>LangSmith</th>
+              <th>Langfuse</th>
+              <th>AgentOps</th>
+              <th class="blamr-col">blamr</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Span-level tracing</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="blamr-col yes">Yes</td></tr>
+            <tr><td>Blame propagation</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="blamr-col yes">Yes</td></tr>
+            <tr><td>Root cause ranking</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="blamr-col yes">Yes</td></tr>
+            <tr><td>Confidence decay tracking</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="blamr-col yes">Yes</td></tr>
+            <tr><td>Intent preservation tracking</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="blamr-col yes">Yes</td></tr>
+            <tr><td>MCP-native instrumentation</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="blamr-col yes">Yes</td></tr>
+            <tr><td>Self-hostable OSS</td><td class="no">No</td><td class="yes">Yes</td><td class="no">No</td><td class="blamr-col yes">Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="landing-section alt">
+      <div class="landing-section-hdr">
+        <h2>Why now</h2>
+        <p>Four independent forcing functions aligned in 2026 — production pain, protocol standardization, regulation, and validated research.</p>
+      </div>
+      <div class="landing-why-grid">
+        <div class="landing-why-card"><div class="num">01</div><h4>Multi-agent systems hit production scale</h4><p>5–15+ coordinating agents are a 2026 phenomenon — MCP, LangGraph, CrewAI. The debugging pain did not exist at this scale a year ago.</p></div>
+        <div class="landing-why-card"><div class="num">02</div><h4>MCP is the universal agent protocol</h4><p>Linux Foundation standard across Anthropic, Microsoft, Google, AWS. blamr instruments at the protocol layer — framework-agnostic by design.</p></div>
+        <div class="landing-why-card"><div class="num">03</div><h4>EU AI Act audit trails (Aug 2026)</h4><p>High-risk AI systems need tamper-evident traceability. Causal audit export is compliance infrastructure — not optional for enterprise HR and finance.</p></div>
+        <div class="landing-why-card"><div class="num">04</div><h4>Research proved it — nobody shipped OSS</h4><p>AgentTrace, AAAI causal inference, A2P scaffolding — validated approaches with no production open-source implementation yet.</p></div>
+      </div>
+    </section>
+
+    <section id="deploy" class="landing-section">
+      <div class="landing-section-hdr">
+        <h2>Self-hosted by default</h2>
+        <p>Run the full stack on your infrastructure. Docker Compose, Helm, Ollama-only LLM enrichment — no cloud LLM required.</p>
+      </div>
+      <div class="landing-deploy">
+        <div class="landing-deploy-card"><h4>Docker Compose</h4><p>API, ingest, workers, dashboard, ClickHouse, Redpanda, Postgres — one command to stand up the stack.</p></div>
+        <div class="landing-deploy-card"><h4>SDK + MCP proxy</h4><p>TypeScript SDK, Python SDK, or zero-code MCP middleware — emit causal edges from any agent runtime.</p></div>
+        <div class="landing-deploy-card"><h4>Helm on Kubernetes</h4><p>Production chart with ingress, init jobs, and local Ollama for semantic drift and blame reasons.</p></div>
+      </div>
+    </section>
+
+    <footer class="landing-footer">
+      <img class="landing-footer-logo" src="assets/blamr_logo.svg" alt="blamr" width="209" height="46" />
+      <p>blamr is open-source causal intelligence for multi-agent systems. Trace handoffs, attribute blame, explain failures — before they reach production users.</p>
+      <div class="landing-cta-row">
+        <a class="landing-btn landing-btn-ghost" href="causal-monitoring.html">How monitoring works</a>
+        <a class="landing-btn landing-btn-primary" href="docs.html">Read the install guide</a>
+        <a class="landing-btn landing-btn-ghost" href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">Clone the repository</a>
+      </div>
+      <div class="landing-footer-links">
+        <a href="https://github.com/prithvirajualluri/blamr" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="docs.html">Install docs</a>
+        <a href="causal-monitoring.html">Causal monitoring</a>
+        <a href="#philosophy">Philosophy</a>
+        <a href="#deploy">Self-host</a>
+      </div>
+    </footer>
+  </div>
+  <script src="graphics.js"></script>
+</body>
+</html>
