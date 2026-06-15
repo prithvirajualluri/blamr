@@ -5,6 +5,15 @@ import type {
   WorkflowProfile,
 } from '@blamr/types';
 import {
+  enrichEdgeTelemetry,
+  estimateCostUsd,
+  providerUsageFromAnthropic,
+  providerUsageFromOpenAi,
+  resolveTelemetryConfig,
+  type ProviderUsage,
+  type TelemetryConfig,
+} from './telemetry';
+import {
   DEFAULT_CONFIDENCE_ACCEPT_LEVEL,
   evaluateConfidenceGate,
 } from '@blamr/types';
@@ -32,6 +41,11 @@ export interface WrapClientOptions {
   workflowConfig?: WorkflowProfile;
   /** Auto-call completeRun(success) when the wrapped process exits (Node only). */
   autoCompleteRun?: boolean;
+  /**
+   * Fill missing tokens/cost on emitEdge (previews + model pricing) and attach
+   * usage from wrapClient LLM calls. Env: BLAMR_ENRICH_USAGE, BLAMR_ATTACH_PROVIDER_USAGE.
+   */
+  telemetry?: import('./telemetry').TelemetryConfig;
 }
 
 const PREVIEW_MAX = 500;
@@ -62,6 +76,8 @@ async function emitLlmHop(
   model: string,
 ): Promise<void> {
   const { computeConfidenceOut } = await import('./signals');
+  const telemetry = emitter.getTelemetryConfig();
+  const cost = estimateCostUsd(model, tokensIn, tokensOut, telemetry.modelPricing);
   await emitter.emitEdge({
     from_agent: options.agentId,
     to_agent: options.agentId,
@@ -71,6 +87,7 @@ async function emitLlmHop(
     latency_ms: Date.now() - start,
     model: model || 'unknown',
     call_type: 'LLM call',
+    cost_usd: cost,
     ...(inputPreview ? { input_preview: inputPreview } : {}),
     ...(text ? { output_preview: truncatePreview(text) } : {}),
   });
@@ -100,6 +117,9 @@ function wrapOpenAiChat(
                   choices?: Array<{ message?: { content?: string | null } }>;
                 };
                 const text = resp.choices?.[0]?.message?.content ?? '';
+                emitter.recordProviderUsage(
+                  providerUsageFromOpenAi(resp, Date.now() - start),
+                );
                 await emitLlmHop(
                   emitter,
                   options,
@@ -118,6 +138,33 @@ function wrapOpenAiChat(
         });
       }
       return Reflect.get(target, chatProp);
+    },
+  });
+}
+
+function wrapAnthropicMessages(
+  messagesTarget: object,
+  emitter: BlamrEmitter,
+  options: WrapClientOptions,
+): object {
+  return new Proxy(messagesTarget, {
+    get(target, prop) {
+      if (prop === 'create') {
+        return async (...args: unknown[]) => {
+          if (!emitter.getCurrentRunId()) emitter.startRun();
+          const start = Date.now();
+          const createFn = Reflect.get(target, prop) as (...a: unknown[]) => Promise<unknown>;
+          const response = await createFn.apply(target, args);
+          const resp = response as {
+            model?: string;
+            usage?: { input_tokens?: number; output_tokens?: number };
+            content?: Array<{ type?: string; text?: string }>;
+          };
+          emitter.recordProviderUsage(providerUsageFromAnthropic(resp, Date.now() - start));
+          return response;
+        };
+      }
+      return Reflect.get(target, prop);
     },
   });
 }
@@ -161,12 +208,29 @@ export class BlamrEmitter {
     prevHash: '',
     hops: [],
   };
+  private readonly telemetry: ReturnType<typeof resolveTelemetryConfig>;
+  private providerUsageQueue: ProviderUsage[] = [];
 
   constructor(
     private readonly options: WrapClientOptions,
     private readonly apiKey: string,
     private readonly endpoint: string,
-  ) {}
+  ) {
+    this.telemetry = resolveTelemetryConfig(options.telemetry);
+  }
+
+  getTelemetryConfig() {
+    return this.telemetry;
+  }
+
+  /** Used by wrapClient to queue real provider usage for the next emitEdge. */
+  recordProviderUsage(usage: ProviderUsage): void {
+    this.providerUsageQueue.push(usage);
+  }
+
+  private consumeProviderUsage(): ProviderUsage | undefined {
+    return this.providerUsageQueue.shift();
+  }
 
   getWorkflowConfig(): WorkflowProfile | undefined {
     return this.options.workflowConfig;
@@ -200,6 +264,26 @@ export class BlamrEmitter {
   async emitEdge(edge: Partial<CausalEdge>): Promise<void> {
     if (!this.state.runId) this.startRun();
 
+    const providerUsage =
+      this.telemetry.attachProviderUsage && (edge.tokens_in ?? 0) === 0 && (edge.tokens_out ?? 0) === 0
+        ? this.consumeProviderUsage()
+        : undefined;
+
+    const enriched = enrichEdgeTelemetry(
+      {
+        tokens_in: edge.tokens_in,
+        tokens_out: edge.tokens_out,
+        cost_usd: edge.cost_usd,
+        latency_ms: edge.latency_ms,
+        model: edge.model,
+        call_type: edge.call_type,
+        input_preview: edge.input_preview,
+        output_preview: edge.output_preview,
+      },
+      this.telemetry,
+      providerUsage,
+    );
+
     const fullEdge: CausalEdge = {
       id: edge.id || `edge_${Date.now()}`,
       run_id: this.state.runId!,
@@ -213,12 +297,12 @@ export class BlamrEmitter {
       confidence_out: edge.confidence_out ?? 1.0,
       intent_delta: edge.intent_delta ?? 0,
       influence_score: edge.influence_score ?? 0.8,
-      tokens_in: edge.tokens_in ?? 0,
-      tokens_out: edge.tokens_out ?? 0,
-      latency_ms: edge.latency_ms ?? 0,
-      model: edge.model ?? 'unknown',
-      call_type: edge.call_type ?? 'LLM call',
-      cost_usd: edge.cost_usd ?? 0,
+      tokens_in: enriched.tokens_in ?? 0,
+      tokens_out: enriched.tokens_out ?? 0,
+      latency_ms: enriched.latency_ms ?? 0,
+      model: enriched.model ?? 'unknown',
+      call_type: (enriched.call_type ?? 'LLM call') as CausalEdge['call_type'],
+      cost_usd: enriched.cost_usd ?? 0,
       prev_hash: this.state.prevHash,
       edge_hash: edge.edge_hash || `pending_${Date.now()}`,
       ...(edge.input_preview !== undefined ? { input_preview: edge.input_preview } : {}),
@@ -380,6 +464,9 @@ export function wrapClient<T extends Record<string, unknown>>(
       if (prop === 'chat' && value && typeof value === 'object') {
         return wrapOpenAiChat(value as object, emitter, options);
       }
+      if (prop === 'messages' && value && typeof value === 'object') {
+        return wrapAnthropicMessages(value as object, emitter, options);
+      }
       return value;
     },
   };
@@ -407,3 +494,9 @@ export {
   computeHopSignals,
 } from './signals';
 export type { ConfidenceOutInput, HopSignalsInput, HopSignals } from './signals';
+export type { TelemetryConfig, ProviderUsage } from './telemetry';
+export {
+  enrichEdgeTelemetry,
+  estimateCostUsd,
+  resolveTelemetryConfig,
+} from './telemetry';

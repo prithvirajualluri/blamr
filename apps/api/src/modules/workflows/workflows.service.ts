@@ -237,6 +237,11 @@ export class WorkflowsService {
             input_preview: e.input_preview ?? '',
             output_preview: e.output_preview ?? '',
             call_type: e.call_type,
+            model: e.model ?? '',
+            tokens_in: e.tokens_in,
+            tokens_out: e.tokens_out,
+            cost_usd: e.cost_usd,
+            latency_ms: e.latency_ms,
           });
         }
       }

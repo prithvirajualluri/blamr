@@ -24,6 +24,11 @@ export interface EdgeSample {
   input_preview: string;
   output_preview: string;
   call_type: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+  latency_ms: number;
 }
 
 export interface RunSample {
@@ -39,6 +44,11 @@ export interface DriftHopSample {
 }
 
 const VALID_CALL_TYPES = new Set(['LLM call', 'Tool call', 'Vision call', 'MCP call']);
+const LLM_CALL_TYPES = new Set(['LLM call', 'Vision call']);
+
+function hopHasZeroUsage(e: EdgeSample): boolean {
+  return e.tokens_in === 0 && e.tokens_out === 0 && e.cost_usd === 0;
+}
 
 export function analyzeIntegrationHealth(
   edges: EdgeSample[],
@@ -108,6 +118,33 @@ export function analyzeIntegrationHealth(
       severity: 'warn',
       title: 'Non-standard call_type values',
       detail: `Use "LLM call", "Tool call", "MCP call", or "Vision call" — found ${invalidCallType} hop(s) with other values.`,
+    });
+  }
+
+  const billableHops = edges.filter(
+    (e) =>
+      LLM_CALL_TYPES.has(e.call_type)
+      || (e.model && e.model !== 'unknown' && e.call_type !== 'Tool call' && e.call_type !== 'MCP call'),
+  );
+  const billableZeroUsage = billableHops.filter(hopHasZeroUsage);
+  if (billableZeroUsage.length > 0) {
+    const allBillableZero = billableZeroUsage.length === billableHops.length;
+    const hasTypedLlm = billableHops.some((e) => LLM_CALL_TYPES.has(e.call_type));
+    recommendations.push({
+      id: 'zero_cost_telemetry',
+      severity: hasTypedLlm || allBillableZero ? 'critical' : 'warn',
+      title: 'Cost and token telemetry missing',
+      detail: `${billableZeroUsage.length} hop(s) look like LLM work (model set or "LLM call") but report 0 tokens and $0 cost. Pass tokens_in, tokens_out, latency_ms, and cost_usd from the provider on emitEdge() — blamr does not infer pricing from the model name.`,
+    });
+  }
+
+  const zeroLatencyHops = edges.filter((e) => e.latency_ms === 0).length;
+  if (zeroLatencyHops === edges_analyzed && edges_analyzed > 0) {
+    recommendations.push({
+      id: 'zero_latency',
+      severity: 'warn',
+      title: 'Latency not recorded',
+      detail: 'Every hop has latency_ms = 0. Set latency_ms to wall-clock time for each hop so trace and cost views reflect real execution time.',
     });
   }
 

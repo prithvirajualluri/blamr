@@ -9,6 +9,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from blamr_sdk.telemetry import ProviderUsage, enrich_edge_fields
+
 
 def _truncate(text: str, max_len: int = 500) -> str:
     line = " ".join(str(text).split())
@@ -34,6 +36,15 @@ class BlamrEmitter:
         self._last_confidence_out = 1.0
         self._last_agent = agent_id
         self._prev_hash = ""
+        self._provider_usage_queue: list[ProviderUsage] = []
+
+    def record_provider_usage(self, usage: ProviderUsage) -> None:
+        self._provider_usage_queue.append(usage)
+
+    def _consume_provider_usage(self) -> ProviderUsage | None:
+        if not self._provider_usage_queue:
+            return None
+        return self._provider_usage_queue.pop(0)
 
     def start_run(self, run_id: str | None = None) -> str:
         self._run_id = run_id or f"run_{int(time.time() * 1000)}_{os.urandom(3).hex()}"
@@ -69,30 +80,36 @@ class BlamrEmitter:
         if not self._run_id:
             self.start_run()
 
-        hop = fields.get("hop_index", self._hop_index)
+        provider = None
+        if (fields.get("tokens_in") or 0) == 0 and (fields.get("tokens_out") or 0) == 0:
+            provider = self._consume_provider_usage()
+
+        enriched = enrich_edge_fields(fields, provider)
+
+        hop = enriched.get("hop_index", self._hop_index)
         edge: dict[str, Any] = {
             "run_id": self._run_id,
             "workflow_id": self.workflow_id,
-            "from_agent": fields.get("from_agent", self.agent_id),
-            "to_agent": fields.get("to_agent", self._last_agent),
+            "from_agent": enriched.get("from_agent", self.agent_id),
+            "to_agent": enriched.get("to_agent", self._last_agent),
             "hop_index": hop,
             "timestamp_ms": int(time.time() * 1000),
-            "confidence_in": fields.get("confidence_in", self._last_confidence_out),
-            "confidence_out": fields.get("confidence_out", 1.0),
-            "intent_delta": fields.get("intent_delta", -0.02),
-            "influence_score": fields.get("influence_score", 0.8),
-            "tokens_in": fields.get("tokens_in", 0),
-            "tokens_out": fields.get("tokens_out", 0),
-            "latency_ms": fields.get("latency_ms", 0),
-            "model": fields.get("model", "unknown"),
-            "call_type": fields.get("call_type", "LLM call"),
-            "cost_usd": fields.get("cost_usd", 0),
+            "confidence_in": enriched.get("confidence_in", self._last_confidence_out),
+            "confidence_out": enriched.get("confidence_out", 1.0),
+            "intent_delta": enriched.get("intent_delta", -0.02),
+            "influence_score": enriched.get("influence_score", 0.8),
+            "tokens_in": enriched.get("tokens_in", 0),
+            "tokens_out": enriched.get("tokens_out", 0),
+            "latency_ms": enriched.get("latency_ms", 0),
+            "model": enriched.get("model", "unknown"),
+            "call_type": enriched.get("call_type", "LLM call"),
+            "cost_usd": enriched.get("cost_usd", 0),
             "prev_hash": self._prev_hash,
             "edge_hash": f"pending_{int(time.time() * 1000)}",
         }
         for key in ("input_preview", "output_preview"):
-            if fields.get(key):
-                edge[key] = _truncate(str(fields[key]))
+            if enriched.get(key):
+                edge[key] = _truncate(str(enriched[key]))
 
         self._post("/edges", edge)
         self._hop_index = max(self._hop_index, hop + 1)
