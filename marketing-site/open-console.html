@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>blamr — Open console</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    body { font-family: system-ui, sans-serif; background: #070d1a; color: #94a3b8; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+    a { color: #22d3ee; }
+  </style>
+  <script>
+    (function () {
+      var loc = window.location;
+      var hash = loc.hash && loc.hash.length > 1 ? loc.hash : '#/overview';
+      var path = '/app' + (hash.startsWith('#') ? hash : '#' + hash);
+
+      if (loc.protocol === 'file:') {
+        window.location.replace('http://localhost:8080' + path);
+        return;
+      }
+
+      var port = loc.port;
+      var sameHost =
+        port === '8080'
+        || (port === '' && (loc.protocol === 'http:' || loc.protocol === 'https:'));
+      if (sameHost) {
+        window.location.replace(path);
+        return;
+      }
+
+      var proto = loc.protocol;
+      var host = loc.hostname || 'localhost';
+      window.location.replace(proto + '//' + host + ':8080' + path);
+    })();
+  </script>
+</head>
+<body>
+  <p>Opening blamr console… <a href="/app">Continue</a></p>
+</body>
+</html>

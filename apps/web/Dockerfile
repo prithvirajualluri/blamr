@@ -2,6 +2,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/types ./packages/types
+COPY marketing-site ./marketing-site
+COPY scripts/sync-marketing-site.sh ./scripts/sync-marketing-site.sh
 COPY apps/web ./apps/web
 RUN npm ci --workspace=@blamr/types --workspace=@blamr/web
 RUN npm run build -w @blamr/types

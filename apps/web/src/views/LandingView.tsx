@@ -176,7 +176,7 @@ export function LandingView() {
           <a href="#deploy" className="hide-sm" onClick={(e) => { e.preventDefault(); scrollTo('deploy'); }}>Deploy</a>
           <a href={DOCS} className="hide-sm">Docs</a>
           <a href={CAUSAL_MONITORING} className="hide-sm">Causal monitoring</a>
-          <a className="landing-btn landing-btn-primary" href="/app">Open console</a>
+          <a className="landing-btn landing-btn-primary" href="/open-console.html">Open console</a>
           <a className="landing-btn landing-btn-ghost" href={GITHUB} target="_blank" rel="noreferrer">
             GitHub
           </a>

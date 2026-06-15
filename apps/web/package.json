@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "sync:marketing": "bash ../../scripts/sync-marketing-site.sh",
+    "prebuild": "npm run sync:marketing",
+    "dev": "npm run sync:marketing && vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "tsx --test src/utils/topology.test.ts"
