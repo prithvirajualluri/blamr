@@ -366,7 +366,7 @@ This is **connectivity**, not blame — it tells operators whether instrumentati
 | Tab | Data shown | Business purpose |
 |-----|------------|------------------|
 | **Graph** | Causal graph with confidence + influence | See handoff topology and weak links |
-| **Trace** | Hop-by-hop I/O, latency, tokens | Debug what each agent saw/produced |
+| **Trace** | Hop-by-hop I/O, latency, tokens; **Counterfactual blame** and **LLM replay** panels on LLM hops | Debug what each agent saw/produced; simulate or re-run hops |
 | **Cost** | Token and USD breakdown | FinOps |
 | **Blame / Attribution** | Ranked agents + reasons | Root cause (failed) or influence (success) |
 | **Timeline** | Chronological hop sequence | Incident replay |
@@ -399,6 +399,7 @@ Redis pub/sub `blame.completed:{run_id}` enables real-time UI updates.
 | Ingest endpoint for agents | `BLAMR_ENDPOINT=http://host:3001/v1` |
 | Dashboard ingest URL (snippets) | `VITE_INGEST_URL` at web build → `apps/web/src/config.ts` |
 | Inflation display threshold | Workspace settings (dashboard) |
+| LLM hop replay providers | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, or `BLAMR_LLM_BASE_URL` / `BLAMR_REPLAY_MODEL` |
 
 ---
 

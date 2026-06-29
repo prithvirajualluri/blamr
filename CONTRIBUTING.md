@@ -41,7 +41,22 @@ After the stack is up and `samples/agents/.env` has a key:
 ./scripts/verify-agent-connection.sh samples/agents/.env
 ```
 
-Runs unit tests in `@blamr/types`, `@blamr/sdk`, and `@blamr/web`.
+Runs unit tests in `@blamr/types`, `@blamr/sdk`, `@blamr/blame`, `@blamr/replay`, and `@blamr/web`.
+
+## Monorepo packages
+
+| Package | Path | Published | Role |
+|---------|------|-----------|------|
+| `@blamr/types` | `packages/types` | npm (planned) | Shared types, causal helpers |
+| `@blamr/sdk` | `packages/sdk-ts` | npm (planned) | TypeScript ingest SDK, `blamrTrace` |
+| `@blamr/blame` | `packages/blame` | private | Blame computation (API + workers) |
+| `@blamr/replay` | `packages/replay` | private | LLM hop replay engine (API) |
+| `@blamr/api` | `apps/api` | private | REST API |
+| `@blamr/ingest` | `apps/ingest` | private | Edge ingest |
+| `@blamr/workers` | `apps/workers` | private | Kafka consumers |
+| `@blamr/web` | `apps/web` | private | Operator dashboard |
+
+Apps (`apps/*`) and internal packages remain private monorepo workspaces and are not published to npm.
 
 ## Commits
 
@@ -53,8 +68,6 @@ These workspaces are intended for npm publish (MIT):
 
 - `@blamr/types` — shared types and causal helpers
 - `@blamr/sdk` — TypeScript ingest SDK
-
-Apps (`apps/*`) and samples remain private monorepo packages and are not published to npm.
 
 ## Publishing to GitHub
 

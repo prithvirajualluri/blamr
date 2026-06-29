@@ -67,6 +67,35 @@ The dashboard **Workflows → Instrumentation** column surfaces integration gaps
 
 ---
 
+## Hop replay
+
+Two replay modes help operators investigate failed or surprising hops without re-running the full workflow.
+
+### Counterfactual blame replay
+
+Simulates how blame would change if a hop had different telemetry — **no LLM call**.
+
+- **API:** `POST /v1/runs/:id/replay-blame` with `{ hop_index, output_preview?, input_preview?, confidence_out?, intent_delta? }`
+- **UI:** **Counterfactual blame** tab on the run Trace tab
+
+Use this to answer “what if this hop had returned a different answer or confidence?”
+
+### Full LLM hop replay
+
+Re-executes an LLM or Vision hop with edited input and compares original vs new output (line diff, latency, tokens, cost). Replays are stored in Postgres.
+
+- **API:** `POST /v1/runs/:id/hops/:hopIndex/replay` — list with `GET /v1/runs/:id/replays`
+- **Engine:** `@blamr/replay` package (OpenAI, Anthropic, Groq, Ollama routing)
+- **UI:** **LLM replay** tab on the run Trace tab (LLM hops only)
+
+**Provider keys:** cloud replay uses `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GROQ_API_KEY` when the hop model matches; otherwise falls back to Ollama via `BLAMR_LLM_BASE_URL` or `BLAMR_REPLAY_MODEL`.
+
+**Warning:** LLM replay can incur real API cost on cloud providers.
+
+Details and request body → [INSTALL.md § Full LLM hop replay](./INSTALL.md#full-llm-hop-replay)
+
+---
+
 ## Confidence accept level
 
 Set a per-workflow minimum confidence. Runs below the threshold are marked **failed** (workers re-check server-side from ingested edges).

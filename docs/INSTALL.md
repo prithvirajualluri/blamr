@@ -55,7 +55,7 @@ docker compose up --build -d
 | Ingest | http://localhost:3001 |
 | Ollama | http://localhost:11434 |
 
-**First run:** register at the dashboard → **Settings → API & keys** → create key with `ingest:write`.
+**First run:** register at the dashboard — the **connection wizard** opens automatically. Or go to **Settings → API & keys** to create a key with `ingest:write`. See [Connect agents in 5 minutes](#connect-agents-in-5-minutes) below.
 
 ### Connect agents in 5 minutes
 
@@ -600,6 +600,7 @@ More: [DEPLOYMENT.md § Troubleshooting](./DEPLOYMENT.md#troubleshooting)
 
 | Doc | Purpose |
 |-----|---------|
+| [README.md](./README.md) | Documentation index by role |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker env vars, architecture, production checklist |
 | [deploy/helm/README.md](../deploy/helm/README.md) | Kubernetes / Helm install |
 | [OPERATIONS.md](./OPERATIONS.md) | Day-2 ops, worker health, restarts |
