@@ -18,9 +18,36 @@ Novel fields not in OpenTelemetry or standard trace specs:
 | `intent_delta` | −1–0 | Goal drift per hop (domain alignment + relevance + semantic merge) |
 | `influence_score` | 0–1 | Downstream causal weight |
 | `input_preview` / `output_preview` | string | Truncated I/O for trace UI and embeddings |
+| `source_hop_ids` | string[] | Upstream hop edge IDs whose outputs were passed as this hop's input (data-flow lineage) |
 | `edge_hash` | SHA256 | Merkle-chained audit trail |
 
 Agent-side signals use `@blamr/sdk` helpers: `computeHopSignals()` merges lexical, JSON `confidence`, tool scores, and alignment ceilings before ingest.
+
+### Blame roles (failed runs)
+
+Each agent in a blame report may carry a **role** derived from hop telemetry (similar to VerdictLens span roles, adapted for causal edges):
+
+| Role | Meaning |
+|------|---------|
+| `originator` | Introduced bad state (null output, intent drift, confidence drop) without inheriting upstream badness |
+| `propagator` | Passed bad state downstream |
+| `manifestor` | Failure became visible at this terminal hop due to upstream issues |
+| `clean` | Minimal fault contribution |
+
+`propagation_chain[]` on the blame report summarizes originator → propagator → manifestor steps. `blame_confidence` (`high` / `medium` / `ambiguous`) reflects the score gap between the top two agents.
+
+### MAST failure modes
+
+When detectable from hop previews and signals, agents are tagged with a **MAST** failure mode (multi-agent failure taxonomy):
+
+| Mode | Typical signal |
+|------|----------------|
+| `system_design/context_overflow` | Context/token limit errors |
+| `system_design/tool_failure` | Tool/MCP hop errors |
+| `inter_agent/premature_termination` | Null or empty agent output |
+| `inter_agent/bad_input_propagation` | Bad upstream input consumed |
+| `inter_agent/intent_drift` | Large negative `intent_delta` |
+| `inter_agent/confidence_inflation` | Confidence rose vs upstream |
 
 ---
 
@@ -152,7 +179,7 @@ Copy [`.env.example`](../.env.example). Key variables:
 | `BLAMR_LLM_BLAME_REASON` | workers | Narrative reasons on failed runs |
 | `BLAMR_LLM_REASON_MODEL` | workers | Default `llama3.2:3b` |
 | `BLAMR_EMBEDDING_MODEL` | workers | Default `nomic-embed-text` |
-| `BLAMR_API_KEY` | agents | Ingest key from dashboard |
-| `BLAMR_ENDPOINT` | agents | Default `http://localhost:3001/v1` |
+| `BLAMR_API_KEY` | agents | Ingest key from dashboard (Settings or connection wizard) |
+| `BLAMR_ENDPOINT` | agents | Ingest URL — default `http://localhost:3001/v1`. **Not** the dashboard API on `:3000`. Shown in wizard, Settings key reveal, and Connect page (`#/connect`). |
 | `BLAMR_ENRICH_USAGE` | agents | Estimate tokens/cost from previews when omitted (default on) |
 | `BLAMR_ATTACH_PROVIDER_USAGE` | agents | Attach wrapped LLM provider usage to next edge (default on) |

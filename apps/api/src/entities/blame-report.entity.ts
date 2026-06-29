@@ -39,6 +39,12 @@ export class BlameReportEntity {
   @Column({ type: 'jsonb', nullable: true })
   ml_fusion!: import('@blamr/types').MlFusionMeta | null;
 
+  @Column({ type: 'jsonb', default: [] })
+  propagation_chain!: string[];
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  blame_confidence!: import('@blamr/types').BlameConfidence | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at!: Date;
 }

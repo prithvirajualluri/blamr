@@ -200,8 +200,3 @@ export function useRunDetail(runId: string | null, enabled = true) {
 
   return { run, loading, error };
 }
-
-/** @deprecated use usePaginatedRuns or useMetricsOverview */
-export function useRuns(refreshKey = 0, enabled = true) {
-  return usePaginatedRuns({ limit: 50, offset: 0 }, refreshKey, enabled);
-}

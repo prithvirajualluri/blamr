@@ -87,7 +87,36 @@ flowchart LR
 6. **Blame processor** — Loads all edges for the run, enriches signals, evaluates confidence gate, computes blame, optionally fuses ML + LLM reasons, persists to Postgres.
 7. **Dashboard** — API serves runs and blame reports; UI renders causal graph, trace, cost, and blame/attribution tabs.
 
-**Important:** Agents talk to **ingest** (`:3001`). The dashboard API (`:3000`) is read/auth only for operators.
+**Important:** Agents talk to **ingest** (`:3001`). The dashboard API (`:3000`) is read/auth only for operators. The dashboard can also POST a **test edge** directly to ingest during onboarding (browser CORS on ingest).
+
+---
+
+## Agent onboarding flow (dashboard)
+
+New workspaces get a guided path from signup to first visible run without external docs:
+
+```mermaid
+flowchart TD
+  signup[Register workspace] --> wizard[Connection wizard]
+  wizard --> key[Create or paste ingest key]
+  key --> env[Copy BLAMR_API_KEY + BLAMR_ENDPOINT]
+  env --> test[Send test connection from browser]
+  test --> ingest[POST /v1/edges + /complete]
+  ingest --> workers[Workers process edge]
+  workers --> live[Live feed: edge.ingested]
+  live --> overview[Overview shows first run]
+  overview --> connect[Connect agents page for SDK/MCP]
+```
+
+| Component | Location | Role |
+|-----------|----------|------|
+| `AgentConnectionWizard` | Dashboard modal | 4-step key → env → test → success |
+| `apps/web/src/config.ts` | Web build | `INGEST_ENDPOINT` from `VITE_INGEST_URL` |
+| `apps/web/src/api/ingest.ts` | Web client | `sendOnboardingTestEdge()` — browser test ping |
+| `scripts/verify-agent-connection.sh` | Host CLI | Same test edge for docs/CI |
+| Connect page (`#/connect`) | Dashboard | Dynamic ingest URL + `blamrTrace` quick start |
+
+Onboarding completes when the test edge succeeds **or** the user chooses **I'll connect later** (stored per workspace in localStorage). The wizard reopens while `executions.total === 0`.
 
 ---
 
@@ -284,7 +313,17 @@ If `BLAMR_LLM_BLAME_REASON=true`, workers call a local LLM to rewrite blame reas
 
 ## Dashboard business logic
 
-The operator UI reads aggregated data from Postgres via the API (`/v1/metrics/overview`, `/v1/workflows`, `/v1/agents`, `/v1/runs`).
+The operator UI reads aggregated data from Postgres via the API (`/v1/metrics/overview`, `/v1/workflows`, `/v1/agents`, `/v1/runs`). Real-time updates use Server-Sent Events at `GET /v1/live/stream`.
+
+### Live workspace feed
+
+| Event | When emitted | UI behavior |
+|-------|--------------|-------------|
+| `edge.ingested` | ClickHouse writer persists an edge | Live feed hop line; Overview toast on first edge when empty |
+| `run.completed` | Run aggregator finalizes status | Live feed run outcome |
+| `blame.completed` | Blame processor finishes | Live feed root-cause summary |
+
+When `executions.total === 0`, Overview shows a pulsing **Waiting for first edge…** banner and offers the connection wizard CTA.
 
 ### Overview KPIs
 
@@ -358,6 +397,7 @@ Redis pub/sub `blame.completed:{run_id}` enables real-time UI updates.
 | ML blame fusion | `BLAMR_ML_ENABLED`, `BLAMR_ML_FUSION_ALPHA` |
 | LLM blame narratives | `BLAMR_LLM_BLAME_REASON`, `BLAMR_LLM_REASON_MODEL` |
 | Ingest endpoint for agents | `BLAMR_ENDPOINT=http://host:3001/v1` |
+| Dashboard ingest URL (snippets) | `VITE_INGEST_URL` at web build → `apps/web/src/config.ts` |
 | Inflation display threshold | Workspace settings (dashboard) |
 
 ---

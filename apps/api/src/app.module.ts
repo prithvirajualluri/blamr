@@ -8,6 +8,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { LiveModule } from './modules/live/live.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { BootstrapModule } from './bootstrap/bootstrap.module';
@@ -20,6 +21,7 @@ import { WebhookEntity } from './entities/webhook.entity';
 import { UserEntity } from './entities/user.entity';
 import { WorkspaceMemberEntity } from './entities/workspace-member.entity';
 import { WorkspaceInviteEntity } from './entities/workspace-invite.entity';
+import { HopReplayEntity } from './entities/hop-replay.entity';
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { WorkspaceInviteEntity } from './entities/workspace-invite.entity';
         UserEntity,
         WorkspaceMemberEntity,
         WorkspaceInviteEntity,
+        HopReplayEntity,
       ],
       synchronize: true,
       logging: process.env.NODE_ENV === 'development',
@@ -51,6 +54,7 @@ import { WorkspaceInviteEntity } from './entities/workspace-invite.entity';
     WorkflowsModule,
     MetricsModule,
     AgentsModule,
+    LiveModule,
     AuthModule,
     UsersModule,
     AuthGuardsModule,

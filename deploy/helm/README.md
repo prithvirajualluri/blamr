@@ -95,7 +95,7 @@ Key values in `values.yaml`:
 | `secrets.jwtSecret` | API session signing (**rotate in prod**) |
 | `secrets.ingestSecret` | Merkle chain signing |
 | `ingress.hosts.*` | Public hostnames |
-| `web.publicUrls.*` | Must match Vite build args for web image |
+| `web.publicUrls.*` | Must match Vite build args for web image — drives connection wizard, Connect page, and Settings ingest URL snippets (`VITE_INGEST_URL` → `apps/web/src/config.ts`) |
 | `ollama.resources` | Ollama needs ~4Gi RAM minimum |
 | `workers.replicaCount` | Keep at 1 unless you understand Kafka consumer groups |
 | `postgresql.enabled` | Set `false` + `external.postgresql.*` for managed DB |

@@ -19,9 +19,10 @@ import {
   isMlEnabled,
   loadMlBundle,
 } from '@blamr/ml';
-import { computeFromEdges, sleep } from './compute-blame';
+import { computeFromEdges, enrichAgentBlames, sleep } from '@blamr/blame';
 import { RedisDriftCache } from './drift-cache';
 import { loadWorkspaceSettings } from './workspace-settings';
+import { publishLiveEvent } from './live-publisher';
 
 interface RunCompletedEvent {
   run_id: string;
@@ -221,6 +222,14 @@ export class BlameProcessorService implements OnModuleInit {
       const fused = fuseBlameScores(report.agents, mlAnalysis, true);
       fusedAgents = fused.agents;
       report = { ...report, agents: fusedAgents, method: fused.method };
+      const reEnriched = enrichAgentBlames(fusedAgents, edges, failed);
+      fusedAgents = reEnriched.agents;
+      report = {
+        ...report,
+        agents: reEnriched.agents,
+        propagation_chain: reEnriched.propagation_chain,
+        blame_confidence: reEnriched.blame_confidence,
+      };
     }
 
     if (failed) {
@@ -276,8 +285,9 @@ export class BlameProcessorService implements OnModuleInit {
 
     await this.pg.query(
       `INSERT INTO blame_reports (
-        run_id, root_cause_agent, root_cause_pct, method, computed_at_ms, agents, hop_analysis, ml_fusion
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        run_id, root_cause_agent, root_cause_pct, method, computed_at_ms, agents, hop_analysis, ml_fusion,
+        propagation_chain, blame_confidence
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       ON CONFLICT (run_id) DO UPDATE SET
         root_cause_agent = EXCLUDED.root_cause_agent,
         root_cause_pct = EXCLUDED.root_cause_pct,
@@ -285,7 +295,9 @@ export class BlameProcessorService implements OnModuleInit {
         computed_at_ms = EXCLUDED.computed_at_ms,
         agents = EXCLUDED.agents,
         hop_analysis = EXCLUDED.hop_analysis,
-        ml_fusion = EXCLUDED.ml_fusion`,
+        ml_fusion = EXCLUDED.ml_fusion,
+        propagation_chain = EXCLUDED.propagation_chain,
+        blame_confidence = EXCLUDED.blame_confidence`,
       [
         event.run_id,
         finalReport.root_cause_agent,
@@ -295,6 +307,8 @@ export class BlameProcessorService implements OnModuleInit {
         JSON.stringify(finalReport.agents),
         JSON.stringify(finalReport.hop_analysis ?? []),
         finalReport.ml_fusion ? JSON.stringify(finalReport.ml_fusion) : null,
+        JSON.stringify(report.propagation_chain ?? finalReport.propagation_chain ?? []),
+        report.blame_confidence ?? finalReport.blame_confidence ?? null,
       ],
     );
 
@@ -314,6 +328,19 @@ export class BlameProcessorService implements OnModuleInit {
       `blame.completed:${event.run_id}`,
       JSON.stringify({ type: 'blame.completed', ...completed }),
     );
+
+    void publishLiveEvent({
+      type: 'blame.completed',
+      workspace_id: workspaceId,
+      run_id: event.run_id,
+      workflow_id: workflowId,
+      timestamp_ms: Date.now(),
+      payload: {
+        root_cause_agent: finalReport.root_cause_agent,
+        root_cause_pct: finalReport.root_cause_pct,
+        status: run.status,
+      },
+    });
 
     this.logger.log(
       `Blame computed for run ${event.run_id} (${finalReport.root_cause_agent} ${finalReport.root_cause_pct}%, ${finalReport.method})`,

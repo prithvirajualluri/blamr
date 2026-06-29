@@ -1,7 +1,9 @@
-import { Controller, Get, Param, Query, UseGuards, Req, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, Post, Body, UseGuards, Req, Res, ParseIntPipe } from '@nestjs/common';
 import { Response } from 'express';
-import { RunsService } from './runs.service';
+import type { HopLlmReplayRequest } from '@blamr/types';
+import { RunsService, type ReplayBlameBody } from './runs.service';
 import { JwtOrApiKeyGuard } from '../../auth/jwt.guard';
+import { StreamAuthGuard } from '../../auth/stream-auth.guard';
 import { ValkeyService } from '../../services/valkey.service';
 
 @Controller('v1/runs')
@@ -39,8 +41,38 @@ export class RunsController {
   }
 
   @Get(':id/blame')
-  async blame(@Req() req: { workspaceId: string }, @Param('id') id: string) {
-    return this.runsService.getBlame(id, req.workspaceId);
+  async blame(
+    @Req() req: { workspaceId: string },
+    @Param('id') id: string,
+    @Query('recompute') recompute?: string,
+  ) {
+    return this.runsService.getBlame(id, req.workspaceId, {
+      recompute: recompute === '1' || recompute === 'true',
+    });
+  }
+
+  @Post(':id/replay-blame')
+  async replayBlame(
+    @Req() req: { workspaceId: string },
+    @Param('id') id: string,
+    @Body() body: ReplayBlameBody,
+  ) {
+    return this.runsService.replayBlame(id, req.workspaceId, body);
+  }
+
+  @Get(':id/replays')
+  async listReplays(@Req() req: { workspaceId: string }, @Param('id') id: string) {
+    return this.runsService.listHopReplays(id, req.workspaceId);
+  }
+
+  @Post(':id/hops/:hopIndex/replay')
+  async replayHop(
+    @Req() req: { workspaceId: string },
+    @Param('id') id: string,
+    @Param('hopIndex', ParseIntPipe) hopIndex: number,
+    @Body() body: HopLlmReplayRequest,
+  ) {
+    return this.runsService.replayHopLlm(id, req.workspaceId, hopIndex, body);
   }
 
   @Get(':id/confidence-trace')
@@ -70,6 +102,7 @@ export class RunsController {
   }
 
   @Get(':id/stream')
+  @UseGuards(StreamAuthGuard)
   async stream(@Param('id') id: string, @Res() res: Response) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

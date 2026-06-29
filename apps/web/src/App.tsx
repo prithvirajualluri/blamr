@@ -24,8 +24,8 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { hasApiCredentials, setUnauthorizedHandler } from './api/client';
 import { navigateTo, useIsOperatorApp } from './routing';
 import { AppShell } from './components/AppShell';
-import { FirstTimeOnboarding } from './components/FirstTimeOnboarding';
-import type { OnboardingVariant } from './components/FirstTimeOnboarding';
+import { AgentConnectionWizard } from './components/AgentConnectionWizard';
+import type { OnboardingVariant } from './components/AgentConnectionWizard';
 import { isOnboardingComplete, markOnboardingComplete } from './auth/onboarding';
 import {
   parseAppRoute,
@@ -227,19 +227,27 @@ function AuthenticatedApp() {
     setShowOnboarding(false);
   }, [user, clearOnboardingTrigger]);
 
-  const onboardingGoSettings = useCallback(() => {
+  const handleWizardTestSuccess = useCallback(async (runId: string) => {
     if (user) markOnboardingComplete(user.workspace_id);
     clearOnboardingTrigger();
-    setShowOnboarding(false);
-    goSettings();
-  }, [user, clearOnboardingTrigger, goSettings]);
+    try {
+      await reloadMetrics();
+      setRefreshKey((k) => k + 1);
+    } catch {
+      /* metrics will refresh on next poll */
+    }
+    addToast('success', `Test edge ingested — run ${runId.slice(-8)}`);
+  }, [user, clearOnboardingTrigger, reloadMetrics, addToast]);
 
-  const onboardingGoConnect = useCallback(() => {
-    if (user) markOnboardingComplete(user.workspace_id);
-    clearOnboardingTrigger();
+  const openConnectionWizard = useCallback(() => {
+    setOnboardingVariant('empty-workspace');
+    setShowOnboarding(true);
+  }, []);
+
+  const wizardGoConnect = useCallback(() => {
     setShowOnboarding(false);
     goConnect();
-  }, [user, clearOnboardingTrigger, goConnect]);
+  }, [goConnect]);
 
   const handleRunSelect = useCallback((id: string, from: DetailSource = 'list') => {
     setDetailSource(from);
@@ -426,6 +434,10 @@ function AuthenticatedApp() {
               onViewAllWorkflows={goWorkflows}
               onViewExecutions={(f) => goList(f ?? 'all')}
               onConnect={goConnect}
+              onOpenWizard={openConnectionWizard}
+              onToast={addToast}
+              onRefreshMetrics={reloadMetrics}
+              refreshKey={refreshKey}
             />
           )}
           {view === 'workflows' && (
@@ -485,7 +497,13 @@ function AuthenticatedApp() {
             <RunDetailView runId={selectedRunId} tab={detailTab} onTabChange={setDetailTab} run={selectedRun} loading={detailLoading} error={detailError} />
           )}
           {view === 'connect' && <ConnectView />}
-          {view === 'settings' && <SettingsView onToast={addToast} />}
+          {view === 'settings' && (
+            <SettingsView
+              onToast={addToast}
+              onOpenWizard={openConnectionWizard}
+              hasRuns={(metrics?.executions.total ?? 0) > 0}
+            />
+          )}
           {view === 'users' && <UsersView onToast={addToast} />}
         </main>
       </div>
@@ -494,14 +512,15 @@ function AuthenticatedApp() {
         <ToastContainer toasts={toasts} onDismiss={dismiss} />
       </div>
       <KeyboardOverlay open={showKb} onClose={() => setShowKb(false)} />
-      <FirstTimeOnboarding
+      <AgentConnectionWizard
         open={showOnboarding}
         variant={onboardingVariant}
         userName={user?.name ?? user?.email ?? 'there'}
         isAdmin={user?.role === 'admin'}
+        onSkip={dismissOnboarding}
         onDismiss={dismissOnboarding}
-        onGoToSettings={onboardingGoSettings}
-        onGoToConnect={onboardingGoConnect}
+        onTestSuccess={handleWizardTestSuccess}
+        onGoToConnect={wizardGoConnect}
       />
       </div>
     </AppShell>

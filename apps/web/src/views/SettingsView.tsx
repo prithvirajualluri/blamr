@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchKeys, fetchWebhooks, fetchWorkspace, patchWorkspaceSettings, createKey, revokeKey, createWebhook, deleteWebhook, testWebhook } from '../api/runs';
+import { sendOnboardingTestEdge } from '../api/ingest';
+import { buildAgentEnvBlock, INGEST_ENDPOINT } from '../config';
 import { ApiBanner, EmptyState } from '../components/ApiBanner';
 import { IconChart, IconBell } from '../components/icons';
 import { hasApiCredentials } from '../api/client';
@@ -28,7 +30,15 @@ function StatCard({ lbl, val, sub, vc = '' }: { lbl: string; val: string; sub: s
   );
 }
 
-export function SettingsView({ onToast }: { onToast?: ToastFn }) {
+export function SettingsView({
+  onToast,
+  onOpenWizard,
+  hasRuns = true,
+}: {
+  onToast?: ToastFn;
+  onOpenWizard?: () => void;
+  hasRuns?: boolean;
+}) {
   const toast = onToast ?? (() => {});
   const [tab, setTab] = useState<SettingsTab>('keys');
   const [keys, setKeys] = useState<KeyRow[]>([]);
@@ -39,6 +49,8 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showReveal, setShowReveal] = useState(false);
   const [revealedKey, setRevealedKey] = useState('');
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [envCopied, setEnvCopied] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   const [wfJson, setWfJson] = useState('');
@@ -111,6 +123,18 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
   return (
     <div className="page-enter" style={{ maxWidth: 900 }}>
       <ApiBanner error={error} />
+
+      {!hasRuns && onOpenWizard && (
+        <div className="settings-connect-banner">
+          <div>
+            <strong>No runs yet</strong>
+            <p>Use the connection wizard to create a key, copy your <code>.env</code>, and send a test edge.</p>
+          </div>
+          <button type="button" className="btn-primary btn-sm" onClick={onOpenWizard}>
+            Open connection wizard
+          </button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, gap: 12, flexWrap: 'wrap' }}>
         <div>
@@ -301,11 +325,50 @@ export function SettingsView({ onToast }: { onToast?: ToastFn }) {
 
       {showReveal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--b1)', borderRadius: 'var(--rad-lg)', padding: 24, maxWidth: 520, width: '90%' }}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--b1)', borderRadius: 'var(--rad-lg)', padding: 24, maxWidth: 560, width: '90%' }}>
             <h3 style={{ marginBottom: 8 }}>API key created</h3>
-            <p style={{ fontSize: 12, color: 'var(--grL)', marginBottom: 12 }}>Copy this key now. It will not be shown again.</p>
-            <div className="mono" style={{ background: 'var(--bg3)', padding: 12, borderRadius: 4, wordBreak: 'break-all', marginBottom: 16 }}>{revealedKey}</div>
-            <button type="button" className="btn-primary" onClick={() => { navigator.clipboard.writeText(revealedKey).catch(() => {}); toast('success', 'Key copied'); setShowReveal(false); }}>Copy &amp; close</button>
+            <p style={{ fontSize: 12, color: 'var(--grL)', marginBottom: 12 }}>Copy this block now. The raw key is shown once.</p>
+            <div className="wizard-warn" style={{ marginBottom: 12 }}>
+              Use ingest URL <code>{INGEST_ENDPOINT}</code> — not the dashboard API on port 3000.
+            </div>
+            <pre className="onboard-code wizard-env-block" style={{ marginBottom: 12 }}>{buildAgentEnvBlock(revealedKey)}</pre>
+            <ul className="wizard-checklist" style={{ marginBottom: 16 }}>
+              <li>Workers running? (required for runs to appear in dashboard)</li>
+              <li>Ollama optional — only needed for sample agent LLM calls</li>
+            </ul>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  navigator.clipboard.writeText(buildAgentEnvBlock(revealedKey)).catch(() => {});
+                  setEnvCopied(true);
+                  toast('success', '.env block copied');
+                  setTimeout(() => setEnvCopied(false), 2000);
+                }}
+              >
+                {envCopied ? 'Copied!' : 'Copy .env block'}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={testingConnection}
+                onClick={async () => {
+                  setTestingConnection(true);
+                  try {
+                    const result = await sendOnboardingTestEdge(revealedKey);
+                    toast('success', `Connection OK — run ${result.run_id.slice(-8)}`);
+                  } catch (e) {
+                    toast('error', e instanceof Error ? e.message : 'Connection test failed');
+                  } finally {
+                    setTestingConnection(false);
+                  }
+                }}
+              >
+                {testingConnection ? 'Testing…' : 'Test connection'}
+              </button>
+              <button type="button" className="btn" onClick={() => setShowReveal(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}

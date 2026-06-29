@@ -25,6 +25,7 @@ run_query "CREATE TABLE IF NOT EXISTS blamr.causal_edges (
     influence_score Float64, tokens_in Int32, tokens_out Int32, latency_ms Int32,
     model String, call_type String, cost_usd Float64, prev_hash String, edge_hash String,
     input_preview String DEFAULT '', output_preview String DEFAULT '',
+    source_hop_ids Array(String) DEFAULT [],
     ingested_at DateTime64(3) DEFAULT now64(3)
 ) ENGINE = MergeTree() ORDER BY (workspace_id, run_id, hop_index)
 TTL toDateTime(ingested_at) + INTERVAL 30 DAY"

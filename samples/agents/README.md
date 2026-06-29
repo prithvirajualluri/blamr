@@ -21,9 +21,17 @@
 
 ```bash
 cp .env.example .env
-# Add BLAMR_API_KEY
+# Add BLAMR_API_KEY and BLAMR_ENDPOINT (ingest URL, default http://localhost:3001/v1)
 npm install   # from repo root after workspace install
 ```
+
+**Before running samples:** use the dashboard **connection wizard** or **Test connection** button to verify your key and ingest URL. Or from the repo root:
+
+```bash
+./scripts/verify-agent-connection.sh samples/agents/.env
+```
+
+> **Common mistake:** `BLAMR_ENDPOINT` must point at the **ingest** service (`http://localhost:3001/v1`), not the dashboard API on port `3000`. The Connect page in the dashboard (`#/connect`) shows the correct URL for your deployment.
 
 ## Run
 
@@ -40,6 +48,7 @@ Or from repo root: `./scripts/run-workflow.sh procurement`
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `BLAMR_API_KEY` | yes | Ingest key from dashboard |
+| `BLAMR_ENDPOINT` | yes | Ingest URL, e.g. `http://localhost:3001/v1` |
 | `BLAMR_LLM_BASE_URL` | no | Default `http://localhost:11434/v1` |
 | `BLAMR_LLM_CHAT_MODEL` | no | Default `llama3.2:3b` |
 

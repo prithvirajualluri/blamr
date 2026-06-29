@@ -1,5 +1,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache bash rsync
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/types ./packages/types
 COPY marketing-site ./marketing-site

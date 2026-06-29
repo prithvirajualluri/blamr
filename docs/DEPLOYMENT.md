@@ -48,15 +48,26 @@ When containers are healthy:
 
 ## First-run setup
 
-### 1. Register a workspace
+### 1. Register and connect (dashboard wizard)
 
 1. Open http://localhost:8080
-2. Create an account and workspace
-3. Go to **Settings → API & keys**
-4. Create a key with **`ingest:write`** scope
-5. Copy the key (shown once)
+2. Create an account and workspace — the **connection wizard** opens automatically
+3. **Step 1** — Create an ingest API key (`ingest:write`) or paste a key from your admin
+4. **Step 2** — Copy the `.env` block (`BLAMR_API_KEY` + `BLAMR_ENDPOINT`). The endpoint must be **ingest** (`http://localhost:3001/v1`), not the dashboard API on port 3000
+5. **Step 3** — Click **Send test connection**. The browser POSTs one test edge directly to ingest (CORS enabled) and completes the run — no local agents or Ollama required
+6. **Step 4** — Open the test run on Overview or go to **Connect agents** for SDK/MCP snippets
 
-### 2. Run sample agents from your host
+The wizard reopens from **Overview** (empty state) or **Settings** until you complete a test edge or choose **I'll connect later**. Key creation in **Settings → API & keys** also offers **Copy .env block** and **Test connection**.
+
+**CLI equivalent:**
+
+```bash
+cp samples/agents/.env.example samples/agents/.env
+# add BLAMR_API_KEY and BLAMR_ENDPOINT
+./scripts/verify-agent-connection.sh samples/agents/.env
+```
+
+### 2. Run sample agents from your host (optional)
 
 The platform runs in Docker; agents connect to published host ports.
 
@@ -99,7 +110,7 @@ Look for Kafka consumer groups joining: `clickhouse-writer`, `blame-processor`, 
 flowchart LR
   Browser["Browser :8080"]
   Agents["Sample agents\n(host)"]
-  Web["web\nnginx"]
+  Web["web\nnginx + SPA"]
   API["api :3000"]
   Ingest["ingest :3001"]
   Workers["workers"]
@@ -110,6 +121,7 @@ flowchart LR
 
   Browser --> Web
   Web -->|"/api proxy"| API
+  Browser -->|"test edge\n(CORS)"| Ingest
   Agents -->|":3001"| Ingest
   API --> PG
   API --> CH
@@ -122,11 +134,21 @@ flowchart LR
   Workers --> VK
 ```
 
+**Traffic split:**
+
+| Client | Target | Purpose |
+|--------|--------|---------|
+| Browser → web | `:8080` | Dashboard SPA |
+| Browser → API | `:3000` (or `/api` proxy) | Auth, runs, metrics, live SSE |
+| Browser → ingest | `:3001` | Connection wizard test edge only |
+| Agents → ingest | `:3001/v1` | Production telemetry |
+| Agents → API | — | **Do not use** for edge emit |
+
 **Internal hostnames** (container-to-container): `postgres`, `clickhouse`, `redpanda`, `valkey`, `api`, `ingest`.
 
 **Host-facing URLs** (browser and SDK on your machine): `localhost:3000`, `localhost:3001`, `localhost:8080`.
 
-The web image bakes `VITE_API_BASE_URL` and `VITE_INGEST_URL` at **build time**. Defaults target `localhost` so the browser can reach API/ingest from your machine. Nginx also proxies `/api/` → `api:3000` for same-origin API calls when configured in the SPA.
+The web image bakes `VITE_API_BASE_URL` and `VITE_INGEST_URL` at **build time** into `apps/web/src/config.ts`. These drive the connection wizard, Connect page snippets, and Settings key reveal — not hardcoded localhost in the SPA. Defaults target `localhost` so the browser can reach API/ingest from your machine. Nginx also proxies `/api/` → `api:3000` for same-origin API calls when configured in the SPA.
 
 ---
 
@@ -162,7 +184,9 @@ Rebuild the web image after changing these:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VITE_API_BASE_URL` | `http://localhost:3000` | API URL in browser |
-| `VITE_INGEST_URL` | `http://localhost:3001` | Ingest URL in browser |
+| `VITE_INGEST_URL` | `http://localhost:3001` | Ingest base URL (no `/v1`) — used by connection wizard, Connect page, Settings |
+
+These are read at build time by `apps/web/src/config.ts` as `INGEST_ENDPOINT = ${VITE_INGEST_URL}/v1`. If the dashboard shows the wrong ingest host after deploy, rebuild the web image with updated build args.
 
 For a custom domain behind a reverse proxy, set these to your public URLs and rebuild:
 
@@ -186,7 +210,7 @@ docker compose up --build -d web
 | `api` | `apps/api/Dockerfile` | 3000 | REST API + auth |
 | `ingest` | `apps/ingest/Dockerfile` | 3001 | Agent edge ingest |
 | `workers` | `apps/workers/Dockerfile` | — | ClickHouse writer, blame, drift |
-| `web` | `apps/web/Dockerfile` | 8080 | Dashboard (nginx + SPA) |
+| `web` | `apps/web/Dockerfile` | 8080 | Dashboard (nginx + SPA; connection wizard, live feed, Connect page) |
 | `ollama` | ollama:latest | 11434 | Local SLM (embeddings + chat) |
 | `ollama-init` | curl (one-shot) | — | Pulls `nomic-embed-text` + `llama3.2:3b` |
 
@@ -301,6 +325,9 @@ Validate locally:
 | Symptom | Fix |
 |---------|-----|
 | Dashboard empty after workflow | Check `docker compose logs workers`; workers must be running |
+| Dashboard empty after **Test connection** | Ingest returned `202` but workers did not finalize — check workers |
+| **Test connection** fails in browser | Rebuild web with correct `VITE_INGEST_URL`; ensure ingest CORS and port reachable from browser |
+| Agents connected but no runs | Wrong `BLAMR_ENDPOINT` — must be ingest `:3001/v1`, not API `:3000` |
 | `connection refused` on :3001 from host | Wait for ingest healthcheck; `docker compose ps` |
 | Port already in use on 3000/3001/8080 | Stop local dev (`dev-backend.sh`, `npm run dev:web`) before `docker compose up` |
 | ClickHouse errors on first boot | `docker compose logs clickhouse-init`; re-run init SQL manually |

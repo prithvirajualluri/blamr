@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { FilterChip } from '../components/ui/FilterChip';
 import { ApiBanner, EmptyState } from '../components/ApiBanner';
 import { BlamrStatusDot } from '../components/BlamrStatusBadge';
-import { Sparkline } from '../components/Sparkline';
+import { LiveFeedPanel } from '../components/LiveFeedPanel';
+import { useLiveFeed } from '../hooks/useLiveFeed';
 import { accCol, fC, fT } from '../utils/format';
 import { formatDuration } from '../utils/runs';
 import { formatLastSeen } from '../utils/blamr-status';
 import { formatScaleCount } from '../utils/registry';
 import type { PlatformOverview, WorkflowApiRow } from '../api/runs';
 import type { RunSummary } from '../types';
+
+type ToastFn = (type: 'info' | 'success' | 'warn' | 'error', message: string) => void;
 
 interface MonitorViewProps {
   metrics: PlatformOverview | null;
@@ -26,6 +29,10 @@ interface MonitorViewProps {
   onViewAllWorkflows: () => void;
   onViewExecutions: (filter?: 'failed') => void;
   onConnect: () => void;
+  onOpenWizard?: () => void;
+  onToast?: ToastFn;
+  onRefreshMetrics?: () => Promise<void>;
+  refreshKey?: number;
 }
 
 export function MonitorView({
@@ -44,6 +51,10 @@ export function MonitorView({
   onViewAllWorkflows,
   onViewExecutions,
   onConnect,
+  onOpenWizard,
+  onToast,
+  onRefreshMetrics,
+  refreshKey = 0,
 }: MonitorViewProps) {
   const m = metrics;
   const critical = m?.workflows.critical ?? 0;
@@ -57,6 +68,27 @@ export function MonitorView({
   const failPct = m && m.executions.total
     ? Math.round((m.executions.failed / m.executions.total) * 100)
     : 0;
+  const waitingForFirst = Boolean(m && m.executions.total === 0 && !loading);
+  const liveEnabled = Boolean(m && m.executions.total >= 0);
+  const { events: liveEvents, connected: liveConnected, clear: clearLive } = useLiveFeed(liveEnabled);
+  const seenEdgeRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    seenEdgeRef.current.clear();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    if (!onToast || !liveEvents.length) return;
+    for (const ev of liveEvents) {
+      if (ev.type !== 'edge.ingested') continue;
+      const key = `${ev.run_id}-${ev.payload.hop_index}-${ev.timestamp_ms}`;
+      if (seenEdgeRef.current.has(key)) continue;
+      seenEdgeRef.current.add(key);
+      onToast('success', `First edge received — hop ${ev.payload.hop_index}`);
+      onRefreshMetrics?.().catch(() => {});
+      break;
+    }
+  }, [liveEvents, onToast, onRefreshMetrics]);
 
   if (loading && !m) {
     return <div className="page-enter view-loading">Loading platform overview…</div>;
@@ -73,8 +105,33 @@ export function MonitorView({
 
       <ApiBanner error={error} />
 
-      {m && m.executions.total === 0 && !loading && (
-        <EmptyState title="No executions yet" subtitle="Connect agents and ingest causal edges to populate the overview." actionLabel="Connect agents →" onAction={onConnect} />
+      {waitingForFirst && (
+        <>
+          <EmptyState
+            title="No executions yet"
+            subtitle="Connect agents and ingest causal edges to populate the overview."
+            actionLabel="Connect agents →"
+            onAction={onConnect}
+          />
+          <div className="waiting-telemetry">
+            <span className={`waiting-telemetry-dot${liveConnected ? ' on' : ''}`} />
+            <span>{liveConnected ? 'Waiting for first edge…' : 'Connecting to live feed…'}</span>
+            {onOpenWizard && (
+              <button type="button" className="btn btn-sm waiting-telemetry-cta" onClick={onOpenWizard}>
+                Run connection wizard
+              </button>
+            )}
+          </div>
+          <div className="mon-grid mon-grid-empty">
+            <LiveFeedPanel
+              events={liveEvents}
+              connected={liveConnected}
+              onSelectRun={onRunSelect}
+              onClear={clearLive}
+              waitingForFirst
+            />
+          </div>
+        </>
       )}
 
       {m && m.executions.total > 0 && (
@@ -172,7 +229,7 @@ export function MonitorView({
                     <span />
                   </div>
                   {workflows.map((wf) => (
-                    <WorkflowOverviewRow key={wf.id} wf={wf} onOpen={() => onWorkflowSelect(wf.id)} onRunSelect={onRunSelect} />
+                    <WorkflowOverviewRow key={wf.id} wf={wf} onOpen={() => onWorkflowSelect(wf.id)} />
                   ))}
                   {workflowsTotal > workflows.length && (
                     <button type="button" className="wf-table-more" onClick={onViewAllWorkflows}>
@@ -212,6 +269,13 @@ export function MonitorView({
                 </div>
               </div>
 
+              <LiveFeedPanel
+                events={liveEvents}
+                connected={liveConnected}
+                onSelectRun={onRunSelect}
+                onClear={clearLive}
+              />
+
               <div className="rcard">
                 <div className="rcard-hdr">Recent failures</div>
                 {recentFailures.map((r) => (
@@ -241,11 +305,9 @@ export function MonitorView({
 function WorkflowOverviewRow({
   wf,
   onOpen,
-  onRunSelect,
 }: {
   wf: WorkflowApiRow;
   onOpen: () => void;
-  onRunSelect: (id: string) => void;
 }) {
   return (
     <div className="wf-overview-row" onClick={onOpen} role="button" tabIndex={0}>

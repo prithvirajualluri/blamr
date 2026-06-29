@@ -8,10 +8,12 @@ import { ApiBanner, EmptyState } from '../components/ApiBanner';
 import { accCol, fC, fM, fT, sumHopCosts } from '../utils/format';
 import { explainConfidenceChange, explainIntentPreserved, contextForHop, resolveDisplayDrift } from '../utils/signal-explain';
 import { ExplainText } from '../components/ExplainText';
+import { HopReplayPanel } from '../components/HopReplayPanel';
 import { CollapsibleSection } from '../components/ui/CollapsibleSection';
 import { computeBlamrStatus } from '../utils/blamr-status';
 import { IconChart, IconDollar, IconClock, IconTok } from '../components/icons';
 import type { TraceHop } from '@blamr/types';
+import { blameRoleLabel, failureModeLabel } from '@blamr/types';
 import type { RunDetail } from '../types';
 
 interface RunDetailViewProps {
@@ -224,6 +226,8 @@ function TraceTab({ run }: { run: RunDetail }) {
         {hops.map((hop) => (
           <TraceHopCard
             key={`${hop.hop_index}-${hop.agent}`}
+            runId={run.id}
+            runComplete={run.status !== 'running'}
             hop={hop}
             allHops={hops}
             workflowId={run.workflow_id}
@@ -235,6 +239,15 @@ function TraceTab({ run }: { run: RunDetail }) {
       </div>
     </>
   );
+}
+
+function roleTagClass(role?: string): string {
+  switch (role) {
+    case 'originator': return 'blame-role-tag originator';
+    case 'manifestor': return 'blame-role-tag manifestor';
+    case 'propagator': return 'blame-role-tag propagator';
+    default: return 'blame-role-tag clean';
+  }
 }
 
 function driftLabel(type?: string): string {
@@ -249,6 +262,8 @@ function driftBadgeVariant(type?: string): 'red' | 'amb' | 'mu' {
 }
 
 function TraceHopCard({
+  runId,
+  runComplete,
   hop,
   allHops,
   workflowId,
@@ -256,6 +271,8 @@ function TraceHopCard({
   maxMs,
   isRoot,
 }: {
+  runId: string;
+  runComplete: boolean;
   hop: TraceHop;
   allHops: TraceHop[];
   workflowId?: string;
@@ -382,6 +399,11 @@ function TraceHopCard({
               No input/output captured for this hop. Re-run with an updated SDK agent to record I/O previews.
             </div>
           )}
+          {runComplete && (
+            <div style={{ paddingLeft: 18, marginTop: 10 }}>
+              <HopReplayPanel runId={runId} hop={hop} />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -447,10 +469,22 @@ function AttributionTab({ run }: { run: RunDetail }) {
         {!failed && (
           <span className="panel-sub">influence distribution — not fault assignment</span>
         )}
+        {failed && run.blame_confidence && (
+          <span className={`blame-confidence-tag ${run.blame_confidence}`}>
+            {run.blame_confidence} confidence
+          </span>
+        )}
         {run.ml_fusion && (
           <span className="panel-sub">ml_fusion v{run.ml_fusion.model_version}</span>
         )}
       </div>
+      {failed && run.propagation_chain && run.propagation_chain.length > 0 && (
+        <div className="blame-propagation-chain">
+          {run.propagation_chain.map((step, i) => (
+            <div key={i} className="blame-chain-step">{step}</div>
+          ))}
+        </div>
+      )}
       {contributing.map((b) => {
         const isRoot = failed && b.root;
         const isLead = !failed && b.agent === leadAgent;
@@ -461,6 +495,14 @@ function AttributionTab({ run }: { run: RunDetail }) {
               <span className="blame-agent">{b.agent}</span>
               {isRoot && <span className="blame-root-tag">root</span>}
               {isLead && <span className="blame-lead-tag">lead</span>}
+              {b.role && b.role !== 'clean' && (
+                <span className={roleTagClass(b.role)}>{blameRoleLabel(b.role)}</span>
+              )}
+              {b.failure_mode && (
+                <span className="blame-failure-tag" title={b.failure_mode}>
+                  {failureModeLabel(b.failure_mode)}
+                </span>
+              )}
               {b.drift_component && b.drift_component !== 'none' && (
                 <span className="blame-drift-tag">{driftLabel(b.drift_component)}</span>
               )}

@@ -157,6 +157,8 @@ export async function fetchRunDetail(id: string): Promise<RunDetail> {
       agents: AgentBlame[];
       hop_analysis?: RunDetail['hop_analysis'];
       ml_fusion?: RunDetail['ml_fusion'];
+      propagation_chain?: string[];
+      blame_confidence?: string;
     }>(`/v1/runs/${id}/blame`).catch(() => null),
     apiFetch<{ hops: ConfidenceHop[] }>(`/v1/runs/${id}/confidence-trace`).catch(() => null),
     apiFetch<{ hops: IntentHop[] }>(`/v1/runs/${id}/intent-trace`).catch(() => null),

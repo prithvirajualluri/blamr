@@ -33,7 +33,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node --test dist/signals.test.js dist/telemetry.test.js"
+    "test": "npm run build && node --test dist/signals.test.js dist/telemetry.test.js dist/transport.test.js dist/lineage.test.js"
   },
   "dependencies": {
     "@blamr/types": "*"

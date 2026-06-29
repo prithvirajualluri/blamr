@@ -1,4 +1,8 @@
 import type { WorkflowProfile } from './workflow-profile';
+import type { BlameConfidence, BlameRole, MastFailureMode } from './failure-modes';
+
+export type { BlameConfidence, BlameRole, MastFailureMode } from './failure-modes';
+export { failureModeLabel, blameRoleLabel } from './failure-modes';
 
 export type { WorkflowConfig } from './confidence-gate';
 export type { WorkflowProfile, WorkflowDomainType } from './workflow-profile';
@@ -37,6 +41,8 @@ export interface CausalEdge {
   input_preview?: string;
   /** Truncated output produced by the agent/tool (optional, set at ingest). */
   output_preview?: string;
+  /** Upstream hop edge ids whose outputs were consumed as this hop's input (data-flow lineage). */
+  source_hop_ids?: string[];
 }
 
 export interface WorkflowRun {
@@ -72,6 +78,10 @@ export interface AgentBlame {
   is_root: boolean;
   reason: string;
   confidence_inflated: boolean;
+  /** Tree-aware role (VerdictLens-style presentation on causal edges). */
+  role?: BlameRole;
+  /** MAST failure-mode label when detectable from hop telemetry. */
+  failure_mode?: MastFailureMode | string;
   /** ML ranker fault % (when ml_fusion enabled). */
   ml_blame_pct?: number;
   /** Primary drift type attributed to this agent. */
@@ -106,6 +116,10 @@ export interface BlameReport {
   agents: AgentBlame[];
   hop_analysis?: HopDriftAnalysis[];
   ml_fusion?: MlFusionMeta | null;
+  /** Human-readable failure propagation steps (originator → manifestor). */
+  propagation_chain?: string[];
+  /** Confidence in root-cause attribution from score gap between top agents. */
+  blame_confidence?: BlameConfidence;
 }
 
 export interface APIKey {
@@ -192,6 +206,7 @@ export interface TraceHop {
   timestamp_ms: number;
   input_preview?: string;
   output_preview?: string;
+  source_hop_ids?: string[];
   /** ML drift classification (populated in blame report hop_analysis). */
   drift_type?: DriftType;
   drift_score?: number;

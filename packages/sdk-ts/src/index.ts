@@ -13,6 +13,7 @@ import {
   type ProviderUsage,
   type TelemetryConfig,
 } from './telemetry';
+import { BlamrTransport, type TransportConfig } from './transport';
 import {
   DEFAULT_CONFIDENCE_ACCEPT_LEVEL,
   evaluateConfidenceGate,
@@ -46,6 +47,8 @@ export interface WrapClientOptions {
    * usage from wrapClient LLM calls. Env: BLAMR_ENRICH_USAGE, BLAMR_ATTACH_PROVIDER_USAGE.
    */
   telemetry?: import('./telemetry').TelemetryConfig;
+  /** Non-blocking ingest transport. Env: BLAMR_SYNC_INGEST, BLAMR_QUEUE_DIR */
+  transport?: TransportConfig;
 }
 
 const PREVIEW_MAX = 500;
@@ -209,6 +212,7 @@ export class BlamrEmitter {
     hops: [],
   };
   private readonly telemetry: ReturnType<typeof resolveTelemetryConfig>;
+  private readonly transport: BlamrTransport;
   private providerUsageQueue: ProviderUsage[] = [];
 
   constructor(
@@ -217,6 +221,16 @@ export class BlamrEmitter {
     private readonly endpoint: string,
   ) {
     this.telemetry = resolveTelemetryConfig(options.telemetry);
+    this.transport = new BlamrTransport(apiKey, endpoint, options.transport);
+  }
+
+  getDefaultAgentId(): string {
+    return this.options.agentId;
+  }
+
+  /** Drain queued edges to ingest (called automatically before completeRun). */
+  async flush(): Promise<void> {
+    await this.transport.flush();
   }
 
   getTelemetryConfig() {
@@ -307,6 +321,7 @@ export class BlamrEmitter {
       edge_hash: edge.edge_hash || `pending_${Date.now()}`,
       ...(edge.input_preview !== undefined ? { input_preview: edge.input_preview } : {}),
       ...(edge.output_preview !== undefined ? { output_preview: edge.output_preview } : {}),
+      ...(edge.source_hop_ids?.length ? { source_hop_ids: edge.source_hop_ids } : {}),
     };
 
     if (edge.hop_index !== undefined) {
@@ -322,18 +337,7 @@ export class BlamrEmitter {
     this.state.lastConfidenceOut = fullEdge.confidence_out;
     this.state.prevHash = fullEdge.edge_hash;
 
-    const res = await fetch(`${this.endpoint}/edges`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey,
-      },
-      body: JSON.stringify(fullEdge),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText);
-      throw new Error(`blamr ingest failed (${res.status}): ${text}`);
-    }
+    await this.transport.send('/edges', fullEdge);
   }
 
   /** Resolve pass/fail using business rules + optional confidence accept level. */
@@ -378,6 +382,7 @@ export class BlamrEmitter {
     const cfg = this.options.workflowConfig;
 
     try {
+      await this.transport.flush();
       const response = await fetch(`${this.endpoint}/runs/${this.state.runId}/complete`, {
         method: 'POST',
         headers: {
@@ -500,3 +505,8 @@ export {
   estimateCostUsd,
   resolveTelemetryConfig,
 } from './telemetry';
+export { BlamrTransport, resolveTransportConfig } from './transport';
+export type { TransportConfig } from './transport';
+export { blamrTrace, runTraced } from './trace';
+export type { BlamrTraceEmitter, BlamrTraceOptions } from './trace';
+export { HopLineageRegistry, previewFromValue, truncatePreview } from './lineage';

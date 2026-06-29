@@ -12,7 +12,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "paths": { "@blamr/types": ["../../packages/types/src"] }
+    "paths": { "@blamr/types": ["../../packages/types/src/index.ts"] }
   },
   "include": ["src"]
 }

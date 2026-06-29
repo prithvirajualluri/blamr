@@ -12,6 +12,10 @@ samples/agents/.env
 coverage/
 .nyc_output/
 *.tsbuildinfo
+dist-test/
+packages/types/src/**/*.js
+packages/types/src/**/*.js.map
+packages/types/src/**/*.d.ts
 target/
 Cargo.lock
 .idea/

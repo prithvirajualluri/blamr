@@ -47,7 +47,14 @@ export function fuseBlameScores(
 }
 
 export function attachHopAnalysisToReport(
-  report: { agents: AgentBlame[]; method: string; root_cause_agent: string; root_cause_pct: number },
+  report: {
+    agents: AgentBlame[];
+    method: string;
+    root_cause_agent: string;
+    root_cause_pct: number;
+    propagation_chain?: string[];
+    blame_confidence?: import('@blamr/types').BlameConfidence;
+  },
   ml: RunMlAnalysis | null,
   fused: AgentBlame[],
 ): {
@@ -57,6 +64,8 @@ export function attachHopAnalysisToReport(
   root_cause_pct: number;
   hop_analysis: RunMlAnalysis['hop_analysis'];
   ml_fusion: RunMlAnalysis['fusion'] | null;
+  propagation_chain?: string[];
+  blame_confidence?: import('@blamr/types').BlameConfidence;
 } {
   const root = fused[0];
   return {

@@ -47,6 +47,33 @@ emitter.emit_edge(
 emitter.complete_run("success")
 ```
 
+## Non-blocking ingest
+
+`emit_edge` returns immediately by default. Failed POSTs are queued under `~/.blamr/queue` and retried. `complete_run()` flushes before run completion.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLAMR_SYNC_INGEST` | off | Block on each POST (tests) |
+| `BLAMR_QUEUE_DIR` | `~/.blamr/queue` | Offline queue directory |
+
+## `@blamr_trace` decorator
+
+Auto-emits edges with previews and `source_hop_ids` lineage:
+
+```python
+from blamr_sdk import BlamrEmitter, blamr_trace
+
+emitter = BlamrEmitter("web-research", "orchestrator", api_key=os.environ["BLAMR_API_KEY"])
+
+@blamr_trace(emitter, agent="researcher")
+def research(query: str) -> str:
+    return do_search(query)
+
+emitter.start_run()
+research("How much PTO?")
+emitter.complete_run("success")
+```
+
 ## Automatic usage telemetry
 
 When `tokens_in`, `tokens_out`, or `cost_usd` are omitted, the SDK enriches each `emit_edge` automatically (default on):

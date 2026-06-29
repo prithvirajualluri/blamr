@@ -35,6 +35,12 @@ npm run test
 npm run build
 ```
 
+After the stack is up and `samples/agents/.env` has a key:
+
+```bash
+./scripts/verify-agent-connection.sh samples/agents/.env
+```
+
 Runs unit tests in `@blamr/types`, `@blamr/sdk`, and `@blamr/web`.
 
 ## Commits

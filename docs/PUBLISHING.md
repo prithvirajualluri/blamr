@@ -29,7 +29,9 @@ Optional Docker smoke test:
 ```bash
 cp .env.docker.example .env
 ./scripts/docker-up.sh
-# Open http://localhost:8080, register, run ./scripts/run-workflow.sh support
+# Open http://localhost:8080, register, run connection wizard or:
+./scripts/verify-agent-connection.sh samples/agents/.env
+./scripts/run-workflow.sh support
 docker compose down
 ```
 

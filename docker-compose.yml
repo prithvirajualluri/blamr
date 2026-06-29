@@ -132,6 +132,12 @@ services:
       CLICKHOUSE_DATABASE: blamr
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       NODE_ENV: production
+      BLAMR_LLM_BASE_URL: ${BLAMR_LLM_BASE_URL:-http://ollama:11434/v1}
+      BLAMR_LLM_API_KEY: ${BLAMR_LLM_API_KEY:-local}
+      BLAMR_REPLAY_MODEL: ${BLAMR_REPLAY_MODEL:-llama3.2:3b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,6 +145,8 @@ services:
         condition: service_completed_successfully
       valkey:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [

@@ -1,10 +1,34 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { WorkflowRunEntity } from '../../entities/workflow-run.entity';
 import { BlameReportEntity } from '../../entities/blame-report.entity';
+import { HopReplayEntity } from '../../entities/hop-replay.entity';
 import { ClickHouseService } from '../../services/clickhouse.service';
-import type { CausalEdge } from '@blamr/types';
+import { computeFromEdges } from '@blamr/blame';
+import { executeHopReplay, isReplayableHop } from '@blamr/replay';
+import type {
+  AgentBlame,
+  BlameReport,
+  CausalEdge,
+  HopLlmReplayRequest,
+  HopLlmReplaySummary,
+} from '@blamr/types';
+
+export interface ReplayBlameBody {
+  hop_index: number;
+  output_preview?: string;
+  input_preview?: string;
+  confidence_out?: number;
+  intent_delta?: number;
+}
+
+export interface ReplayBlameDiff {
+  agent: string;
+  before_pct: number;
+  after_pct: number;
+  delta: number;
+}
 
 @Injectable()
 export class RunsService {
@@ -13,6 +37,8 @@ export class RunsService {
     private readonly runRepo: Repository<WorkflowRunEntity>,
     @InjectRepository(BlameReportEntity)
     private readonly blameRepo: Repository<BlameReportEntity>,
+    @InjectRepository(HopReplayEntity)
+    private readonly hopReplayRepo: Repository<HopReplayEntity>,
     private readonly clickhouse: ClickHouseService,
   ) {}
 
@@ -102,13 +128,186 @@ export class RunsService {
     return { ...run, edges };
   }
 
-  async getBlame(runId: string, workspaceId: string) {
-    await this.requireRun(runId, workspaceId);
-    const report = await this.blameRepo.findOne({ where: { run_id: runId } });
-    if (!report) {
-      throw new NotFoundException(`Blame report for ${runId} not found`);
+  /** Fast edge-only blame (no ML / Ollama). Used for on-demand recompute and counterfactual replay. */
+  computeFastBlame(
+    run: WorkflowRunEntity,
+    edges: CausalEdge[],
+  ): BlameReport & { fast_path: true } {
+    const { report } = computeFromEdges(
+      run.id,
+      run.workflow_id,
+      run.workspace_id,
+      run.status as 'success' | 'failed',
+      run.error_summary,
+      edges,
+    );
+    return {
+      run_id: run.id,
+      ...report,
+      method: `${report.method}_fast`,
+      hop_analysis: [],
+      ml_fusion: null,
+      fast_path: true,
+    };
+  }
+
+  async getBlame(runId: string, workspaceId: string, opts?: { recompute?: boolean }) {
+    const run = await this.requireRun(runId, workspaceId);
+    if (!opts?.recompute) {
+      const stored = await this.blameRepo.findOne({ where: { run_id: runId } });
+      if (stored) return stored;
     }
-    return report;
+
+    const edges = await this.clickhouse.getEdgesByRunId(runId);
+    if (edges.length === 0) {
+      throw new NotFoundException(`Blame report for ${runId} not found (no edges)`);
+    }
+    return this.computeFastBlame(run, edges);
+  }
+
+  async replayBlame(runId: string, workspaceId: string, body: ReplayBlameBody) {
+    const run = await this.requireRun(runId, workspaceId);
+    const edges = await this.clickhouse.getEdgesByRunId(runId);
+    if (edges.length === 0) {
+      throw new NotFoundException(`No edges for run ${runId}`);
+    }
+    const hop = edges.find((e) => e.hop_index === body.hop_index);
+    if (!hop) {
+      throw new NotFoundException(`Hop ${body.hop_index} not found on run ${runId}`);
+    }
+
+    const original = await this.getBlame(runId, workspaceId).catch(() => this.computeFastBlame(run, edges));
+
+    const patchedEdges = edges.map((e) =>
+      e.hop_index === body.hop_index
+        ? {
+            ...e,
+            ...(body.output_preview !== undefined ? { output_preview: body.output_preview } : {}),
+            ...(body.input_preview !== undefined ? { input_preview: body.input_preview } : {}),
+            ...(body.confidence_out !== undefined ? { confidence_out: body.confidence_out } : {}),
+            ...(body.intent_delta !== undefined ? { intent_delta: body.intent_delta } : {}),
+          }
+        : e,
+    );
+
+    const counterfactual = this.computeFastBlame(run, patchedEdges);
+    const diff = this.blameDiff(original.agents, counterfactual.agents);
+
+    return {
+      run_id: runId,
+      hop_index: body.hop_index,
+      patched_fields: {
+        output_preview: body.output_preview ?? hop.output_preview,
+        input_preview: body.input_preview ?? hop.input_preview,
+        confidence_out: body.confidence_out ?? hop.confidence_out,
+        intent_delta: body.intent_delta ?? hop.intent_delta,
+      },
+      original,
+      counterfactual,
+      diff,
+    };
+  }
+
+  private blameDiff(before: AgentBlame[], after: AgentBlame[]): ReplayBlameDiff[] {
+    const beforeMap = new Map(before.map((a) => [a.agent, a.blame_pct]));
+    const agents = new Set([...before.map((a) => a.agent), ...after.map((a) => a.agent)]);
+    const diff: ReplayBlameDiff[] = [];
+    for (const agent of agents) {
+      const b = beforeMap.get(agent) ?? 0;
+      const a = after.find((x) => x.agent === agent)?.blame_pct ?? 0;
+      if (Math.abs(a - b) >= 0.1) {
+        diff.push({ agent, before_pct: b, after_pct: a, delta: Math.round((a - b) * 10) / 10 });
+      }
+    }
+    return diff.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+  }
+
+  async replayHopLlm(
+    runId: string,
+    workspaceId: string,
+    hopIndex: number,
+    body: HopLlmReplayRequest,
+  ) {
+    const run = await this.requireRun(runId, workspaceId);
+    const edges = await this.clickhouse.getEdgesByRunId(runId);
+    if (edges.length === 0) {
+      throw new NotFoundException(`No edges for run ${runId}`);
+    }
+
+    const hop = edges.find((e) => e.hop_index === hopIndex);
+    if (!hop) {
+      throw new NotFoundException(`Hop ${hopIndex} not found on run ${runId}`);
+    }
+    if (!isReplayableHop(hop)) {
+      throw new BadRequestException(
+        `Hop ${hopIndex} is not replayable (requires LLM/Vision call with a recorded model).`,
+      );
+    }
+
+    const result = await executeHopReplay({
+      runId,
+      hopIndex,
+      edges,
+      request: body,
+    });
+
+    if (body.include_blame && result.new_output !== null && result.status !== 'error') {
+      const original = await this.getBlame(runId, workspaceId).catch(() =>
+        this.computeFastBlame(run, edges),
+      );
+      const patchedEdges = edges.map((e) =>
+        e.hop_index === hopIndex ? { ...e, output_preview: result.new_output ?? e.output_preview } : e,
+      );
+      const counterfactual = this.computeFastBlame(run, patchedEdges);
+      result.blame = {
+        original: {
+          root_cause_agent: original.root_cause_agent,
+          root_cause_pct: original.root_cause_pct,
+        },
+        counterfactual: {
+          root_cause_agent: counterfactual.root_cause_agent,
+          root_cause_pct: counterfactual.root_cause_pct,
+        },
+        diff: this.blameDiff(original.agents, counterfactual.agents),
+      };
+    }
+
+    await this.hopReplayRepo.save({
+      id: result.replay_id,
+      run_id: runId,
+      workspace_id: workspaceId,
+      hop_index: hopIndex,
+      agent: hop.from_agent,
+      model: result.model,
+      status: result.status,
+      note: body.note ?? null,
+      result,
+      created_at_ms: result.created_at_ms,
+    });
+
+    return result;
+  }
+
+  async listHopReplays(runId: string, workspaceId: string): Promise<{ replays: HopLlmReplaySummary[] }> {
+    await this.requireRun(runId, workspaceId);
+    const rows = await this.hopReplayRepo.find({
+      where: { run_id: runId, workspace_id: workspaceId },
+      order: { created_at_ms: 'DESC' },
+      take: 100,
+    });
+
+    return {
+      replays: rows.map((r) => ({
+        replay_id: r.id,
+        run_id: r.run_id,
+        hop_index: r.hop_index,
+        agent: r.agent,
+        model: r.model ?? '',
+        status: r.status as HopLlmReplaySummary['status'],
+        note: r.note,
+        created_at_ms: Number(r.created_at_ms),
+      })),
+    };
   }
 
   async getConfidenceTrace(runId: string, workspaceId: string, inflationThreshold = 0.15) {

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-test",
+    "rootDir": "./src",
+    "paths": {
+      "@blamr/types": ["../types/dist"]
+    }
+  },
+  "include": [
+    "src/compute-blame.test.ts",
+    "src/compute-blame.ts",
+    "src/blame-enrichment.test.ts",
+    "src/blame-enrichment.ts"
+  ]
+}

@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node --test dist/*.test.js"
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/*.test.js"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

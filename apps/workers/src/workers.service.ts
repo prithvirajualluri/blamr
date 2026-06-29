@@ -9,7 +9,8 @@ import {
   semanticSettleMs,
 } from '@blamr/semantic';
 import { RedisDriftCache } from './drift-cache';
-import { sleep } from './compute-blame';
+import { sleep } from '@blamr/blame';
+import { publishLiveEvent } from './live-publisher';
 
 @Injectable()
 export class ClickHouseWriterService implements OnModuleInit {
@@ -78,6 +79,22 @@ export class ClickHouseWriterService implements OnModuleInit {
         format: 'JSONEachRow',
       });
       this.logger.log(`Inserted ${batch.length} edges into ClickHouse`);
+
+      for (const edge of batch) {
+        void publishLiveEvent({
+          type: 'edge.ingested',
+          workspace_id: edge.workspace_id,
+          run_id: edge.run_id,
+          workflow_id: edge.workflow_id,
+          timestamp_ms: edge.timestamp_ms || Date.now(),
+          payload: {
+            hop_index: edge.hop_index,
+            from_agent: edge.from_agent,
+            to_agent: edge.to_agent,
+            model: edge.model,
+          },
+        });
+      }
     } catch (err) {
       this.logger.error(`ClickHouse insert failed: ${err}`);
       this.buffer.unshift(...batch);
@@ -114,6 +131,14 @@ export class RunAggregatorService implements OnModuleInit {
         await this.producer.send({
           topic: 'blame.needed',
           messages: [{ key: event.run_id, value: JSON.stringify(event) }],
+        });
+
+        void publishLiveEvent({
+          type: 'run.completed',
+          workspace_id: event.workspace_id,
+          run_id: event.run_id,
+          timestamp_ms: event.completed_at ?? Date.now(),
+          payload: { status: event.status, error_summary: event.error_summary ?? null },
         });
 
         this.logger.log(`Run ${event.run_id} queued for blame computation`);

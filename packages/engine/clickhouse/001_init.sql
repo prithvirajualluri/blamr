@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS blamr.causal_edges (
     edge_hash String,
     input_preview String DEFAULT '',
     output_preview String DEFAULT '',
+    source_hop_ids Array(String) DEFAULT [],
     ingested_at DateTime64(3) DEFAULT now64(3)
 ) ENGINE = MergeTree()
 ORDER BY (workspace_id, run_id, hop_index)

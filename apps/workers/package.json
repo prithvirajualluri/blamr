@@ -5,10 +5,12 @@
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && nest build",
     "dev": "nest start --watch",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "test": "npm run test --workspace=@blamr/blame"
   },
   "dependencies": {
     "@blamr/types": "*",
+    "@blamr/blame": "*",
     "@blamr/semantic": "*",
     "@blamr/ml": "*",
     "@clickhouse/client": "^1.4.0",

@@ -7,8 +7,9 @@ import time
 from typing import Any
 
 from blamr_sdk.client import BlamrEmitter, _truncate
+from blamr_sdk.trace import blamr_trace
 
-__all__ = ["BlamrEmitter", "wrap_client", "BlamrWrappedClient"]
+__all__ = ["BlamrEmitter", "wrap_client", "BlamrWrappedClient", "blamr_trace"]
 
 
 def wrap_client(

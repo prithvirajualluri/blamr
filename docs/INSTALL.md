@@ -9,6 +9,7 @@ How to install and connect to blamr depending on your setup. For production depl
 | I want to… | Section |
 |------------|---------|
 | Run the full platform (fastest) | [Docker Compose](#1-docker-compose-recommended) |
+| Connect agents in under 5 minutes | [Connect agents in 5 minutes](#connect-agents-in-5-minutes) |
 | Develop with hot reload | [Local development](#2-local-development) |
 | Connect TypeScript agents | [TypeScript SDK](#3-typescript-sdk) |
 | Connect Python agents | [Python SDK](#4-python-sdk) |
@@ -55,6 +56,58 @@ docker compose up --build -d
 | Ollama | http://localhost:11434 |
 
 **First run:** register at the dashboard → **Settings → API & keys** → create key with `ingest:write`.
+
+### Connect agents in 5 minutes
+
+Fastest path from signup to your first run on Overview:
+
+1. **Dashboard → Settings → API & keys** — create a key with `ingest:write` scope.
+2. **Copy the `.env` block** shown after key creation (or use the connection wizard):
+   ```bash
+   BLAMR_API_KEY=bk_live_…your_key
+   BLAMR_ENDPOINT=http://localhost:3001/v1   # ingest — NOT port 3000
+   ```
+3. **Optional: test from the dashboard** — the connection wizard (or **Test connection** on the key reveal modal) sends one edge from your browser. No local agents required.
+4. **Connect a real agent** — SDK quick start with `blamrTrace`:
+   ```typescript
+   import { BlamrEmitter, blamrTrace } from '@blamr/sdk';
+   const emitter = new BlamrEmitter({ workflowId: 'my-workflow', agentId: 'my-agent' }, process.env.BLAMR_API_KEY!, process.env.BLAMR_ENDPOINT!);
+   const step = blamrTrace(emitter, { agent: 'researcher' }, async (q) => callLlm(q));
+   emitter.startRun(); await step('hello'); await emitter.completeRun({ businessFailed: false });
+   ```
+   Or run a sample workflow (requires Ollama):
+   ```bash
+   cp samples/agents/.env.example samples/agents/.env   # add BLAMR_API_KEY
+   ./scripts/run-workflow.sh support
+   ```
+
+**CLI verify** (same test edge as the dashboard button):
+
+```bash
+./scripts/verify-agent-connection.sh samples/agents/.env
+```
+
+Open **Connect agents** in the dashboard (`#/connect`) for MCP, full SDK, and adapter snippets with your deployment's ingest URL.
+
+### Dashboard web app (operator UI)
+
+The SPA under `apps/web/` uses build-time env for deployment-specific URLs:
+
+| Source | Runtime constant | Used by |
+|--------|------------------|---------|
+| `VITE_API_BASE_URL` | `API_BASE` in `types.ts` | Auth, runs API, live SSE stream |
+| `VITE_INGEST_URL` | `INGEST_ENDPOINT` in `config.ts` | Connection wizard, Connect page, Settings key reveal |
+
+Key UI modules for agent onboarding:
+
+| Module | Path | Purpose |
+|--------|------|---------|
+| Connection wizard | `components/AgentConnectionWizard.tsx` | Key → `.env` → browser test edge → success |
+| Ingest client | `api/ingest.ts` | `sendOnboardingTestEdge()` — POST edges + complete from browser |
+| Connect view | `views/ConnectView.tsx` | Dynamic snippets + `blamrTrace` quick start |
+| Overview | `views/MonitorView.tsx` | Empty-state wizard CTA, live feed, first-edge toast |
+
+Ingest enables CORS (`origin: *`) so the wizard can verify connectivity without a backend proxy. Production deploys must rebuild the web image when public ingest/API hosts change — see [DEPLOYMENT.md § Web build args](./DEPLOYMENT.md#web-build-args).
 
 Details: [DEPLOYMENT.md](./DEPLOYMENT.md)
 
@@ -242,6 +295,99 @@ Estimates are approximate; re-run the workflow after upgrading `@blamr/sdk` — 
 | `BLAMR_ENDPOINT` | `http://localhost:3001/v1` | Ingest base URL |
 | `BLAMR_ENRICH_USAGE` | `1` | Estimate tokens/cost from previews when omitted |
 | `BLAMR_ATTACH_PROVIDER_USAGE` | `1` | Attach usage from wrapped Anthropic/OpenAI calls |
+| `BLAMR_SYNC_INGEST` | `0` | When `1`, block on each `emitEdge` (tests only) |
+| `BLAMR_QUEUE_DIR` | `~/.blamr/queue` | Offline disk queue when ingest is unreachable |
+| `BLAMR_DISABLED` | `0` | No-op SDK (no network, no disk) |
+
+### Non-blocking ingest (default)
+
+`emitEdge` enqueues locally and returns immediately. A background worker POSTs to ingest; failures spill to `~/.blamr/queue` and retry. `completeRun()` flushes the queue before signaling run completion.
+
+Set `BLAMR_SYNC_INGEST=1` only in tests when you need synchronous delivery.
+
+### `@blamr_trace` / `blamrTrace` — auto edges
+
+Decorator-style wrappers emit one `CausalEdge` per call with previews, parent→child topology, and `source_hop_ids` lineage.
+
+**TypeScript:**
+
+```typescript
+import { BlamrEmitter, blamrTrace } from '@blamr/sdk';
+
+const emitter = new BlamrEmitter({ workflowId: 'web-research', agentId: 'orchestrator' }, apiKey, endpoint);
+emitter.startRun();
+
+const research = blamrTrace(emitter, { agent: 'researcher' }, async (query: string) => {
+  return await search(query);
+});
+
+const summarize = blamrTrace(emitter, { agent: 'summarizer' }, async (findings: string) => {
+  return await llmSummarize(findings);
+});
+
+await research('PTO policy');
+await summarize(findings);
+await emitter.completeRun({ businessFailed: false });
+```
+
+**Python:**
+
+```python
+from blamr_sdk import BlamrEmitter, blamr_trace
+
+emitter = BlamrEmitter("web-research", "orchestrator", api_key=api_key)
+
+@blamr_trace(emitter, agent="researcher")
+def research(query: str) -> str:
+    ...
+
+emitter.start_run()
+research("PTO policy")
+emitter.complete_run("success")
+```
+
+Existing ClickHouse deployments: run `./scripts/migrate-clickhouse-source-hop-ids.sh` once for the `source_hop_ids` column.
+
+### Live feed (SSE)
+
+Workspace-wide Server-Sent Events stream at `GET /v1/live/stream?token=<jwt>`:
+
+| Event | When |
+|-------|------|
+| `edge.ingested` | Each causal edge written to ClickHouse |
+| `run.completed` | Run completion signal received |
+| `blame.completed` | Blame report persisted |
+
+The Overview page shows a **Live feed** panel when connected. Per-run blame streaming remains at `GET /v1/runs/:id/stream`.
+
+### On-demand fast blame
+
+`GET /v1/runs/:id/blame?recompute=1` recomputes blame from ClickHouse edges only (no ML/Ollama wait). If no stored report exists, the API falls back to this fast path automatically.
+
+### Counterfactual hop replay
+
+`POST /v1/runs/:id/replay-blame` with `{ hop_index, output_preview?, input_preview?, confidence_out?, intent_delta? }` simulates how blame would shift if that hop had different telemetry — **no LLM re-execution**. Use the **Counterfactual blame** tab on the run Trace tab.
+
+### Full LLM hop replay
+
+`POST /v1/runs/:id/hops/:hopIndex/replay` re-executes an LLM/Vision hop with edited input and returns a side-by-side comparison (original vs new output, line diff, latency, tokens, cost). Replays are persisted in Postgres; list them with `GET /v1/runs/:id/replays`.
+
+Request body:
+
+```json
+{
+  "input": "edited prompt text",
+  "messages": [{ "role": "user", "content": "..." }],
+  "model": "optional override",
+  "temperature": 0.2,
+  "note": "what you changed",
+  "include_blame": true
+}
+```
+
+**Provider routing:** OpenAI (`OPENAI_API_KEY`), Anthropic (`ANTHROPIC_API_KEY`), Groq (`GROQ_API_KEY`), or local Ollama via `BLAMR_LLM_BASE_URL`. When the hop model is a cloud model but only Ollama is configured, the API uses `BLAMR_REPLAY_MODEL` (default `llama3.2:3b`).
+
+**Warning:** LLM replay spends real API credits on cloud providers. Use the **LLM replay** tab on the run Trace tab (LLM hops only).
 
 More examples (confidence gates, platform mode): [CONCEPTS.md](./CONCEPTS.md)
 
@@ -437,10 +583,14 @@ Push to your registry and point orchestrator env at the same variables as `docke
 | Problem | Fix |
 |---------|-----|
 | Dashboard empty after workflow | Workers not running — `docker compose logs workers` |
+| Dashboard empty after **Test connection** | Same — ingest accepts the edge (`202`) but workers must write to Postgres |
 | Ingest 401 | Invalid or missing `BLAMR_API_KEY` |
+| Test connection fails from browser | Check `VITE_INGEST_URL` matches your public ingest host; rebuild web image |
+| Agents emit but dashboard empty | Wrong endpoint — use ingest `:3001/v1`, not API `:3000` |
 | Semantic drift errors | Ollama not ready — `curl http://localhost:11434/api/tags` |
 | Port conflicts | Stop local dev (`dev-backend.sh`, `npm run dev:web`) before Docker |
 | Sample agent LLM errors | Set `BLAMR_LLM_BASE_URL=http://localhost:11434/v1` in `samples/agents/.env` |
+| Verify script fails | `./scripts/verify-agent-connection.sh samples/agents/.env` — check key + `BLAMR_ENDPOINT` |
 
 More: [DEPLOYMENT.md § Troubleshooting](./DEPLOYMENT.md#troubleshooting)
 

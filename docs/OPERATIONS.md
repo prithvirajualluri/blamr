@@ -37,12 +37,31 @@ For the **full stack in Docker** (no local Node for the platform), see [DEPLOYME
    - `DATABASE_URL`, `CLICKHOUSE_URL`, `KAFKA_BROKERS`, `REDIS_URL`
 3. Confirm workers joined Kafka consumer groups: `clickhouse-writer`, `blame-processor`, `run-aggregator`.
 4. Health: API responds on `/v1/auth/login` (401 without creds is OK). Ingest returns 401/400 on unauthenticated `POST /v1/edges`.
-5. After deploy, run a sample workflow and verify the run appears in Postgres within ~10s of `completeRun`.
+5. After deploy, verify agent connectivity:
+   ```bash
+   ./scripts/verify-agent-connection.sh samples/agents/.env
+   ```
+   Or use **Settings → Test connection** / the dashboard connection wizard (browser POST to ingest).
+6. Confirm a run appears in Postgres within ~10s of `completeRun` or a successful test connection.
+
+## Agent connection verification
+
+Use these checks after deploy or when onboarding a new workspace:
+
+| Method | Command / action | What it proves |
+|--------|------------------|----------------|
+| **CLI script** | `./scripts/verify-agent-connection.sh [path/to/.env]` | Key + ingest URL accept edges and complete runs |
+| **Dashboard wizard** | Overview → connection wizard → **Send test connection** | Same test edge from browser (ingest CORS) |
+| **Settings modal** | Create key → **Test connection** | Key reveal + ingest path after key creation |
+| **Live feed** | Overview → Live feed shows `edge.ingested` | Workers writing edges; SSE stream connected |
+
+The test edge uses `workflow_id: onboarding-test`. It requires **workers** running — ingest alone returns `202` but runs stay invisible until workers process Kafka.
 
 ## What breaks when workers stop
 
 | Symptom | Cause |
 |---------|--------|
+| Test connection succeeds but Overview empty | Workers not writing to Postgres |
 | Runs stuck / missing in dashboard | Blame processor not writing to Postgres |
 | Edges missing in trace | ClickHouse writer not flushing |
 | No ML / semantic hints | Blame processor not running |

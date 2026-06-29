@@ -10,6 +10,7 @@ import urllib.request
 from typing import Any
 
 from blamr_sdk.telemetry import ProviderUsage, enrich_edge_fields
+from blamr_sdk.transport import BlamrTransport
 
 
 def _truncate(text: str, max_len: int = 500) -> str:
@@ -26,11 +27,18 @@ class BlamrEmitter:
         agent_id: str,
         api_key: str | None = None,
         endpoint: str | None = None,
+        *,
+        sync_ingest: bool | None = None,
     ):
         self.workflow_id = workflow_id
         self.agent_id = agent_id
         self.api_key = api_key or os.environ.get("BLAMR_API_KEY", "")
         self.endpoint = (endpoint or os.environ.get("BLAMR_ENDPOINT", "http://localhost:3001/v1")).rstrip("/")
+        self._transport = BlamrTransport(
+            self.api_key,
+            self.endpoint,
+            sync=sync_ingest,
+        )
         self._run_id: str | None = None
         self._hop_index = 0
         self._last_confidence_out = 1.0
@@ -63,18 +71,8 @@ class BlamrEmitter:
         if confidence is not None:
             self._last_confidence_out = confidence
 
-    def _post(self, path: str, body: dict[str, Any]) -> None:
-        if not self.api_key:
-            raise RuntimeError("BLAMR_API_KEY is required")
-        req = urllib.request.Request(
-            f"{self.endpoint}{path}",
-            data=json.dumps(body).encode(),
-            headers={"Content-Type": "application/json", "X-API-Key": self.api_key},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            if resp.status >= 400:
-                raise RuntimeError(f"blamr ingest HTTP {resp.status}")
+    def flush(self) -> None:
+        self._transport.flush()
 
     def emit_edge(self, **fields: Any) -> None:
         if not self._run_id:
@@ -88,6 +86,7 @@ class BlamrEmitter:
 
         hop = enriched.get("hop_index", self._hop_index)
         edge: dict[str, Any] = {
+            "id": enriched.get("id", f"edge_{int(time.time() * 1000)}"),
             "run_id": self._run_id,
             "workflow_id": self.workflow_id,
             "from_agent": enriched.get("from_agent", self.agent_id),
@@ -110,8 +109,10 @@ class BlamrEmitter:
         for key in ("input_preview", "output_preview"):
             if enriched.get(key):
                 edge[key] = _truncate(str(enriched[key]))
+        if enriched.get("source_hop_ids"):
+            edge["source_hop_ids"] = list(enriched["source_hop_ids"])
 
-        self._post("/edges", edge)
+        self._transport.send("/edges", edge)
         self._hop_index = max(self._hop_index, hop + 1)
         self._last_confidence_out = float(edge["confidence_out"])
         self._prev_hash = edge["edge_hash"]
@@ -124,11 +125,12 @@ class BlamrEmitter:
     ) -> dict[str, Any] | None:
         if not self._run_id:
             return None
+        self.flush()
         body: dict[str, Any] = {"status": status, "error_summary": error_summary}
         if workflow_config:
             if "confidence_accept_level" in workflow_config:
                 body["confidence_accept_level"] = workflow_config["confidence_accept_level"]
             if "confidence_gate_mode" in workflow_config:
                 body["confidence_gate_mode"] = workflow_config["confidence_gate_mode"]
-        self._post(f"/runs/{self._run_id}/complete", body)
+        self._transport.send(f"/runs/{self._run_id}/complete", body)
         return {"run_id": self._run_id, "status": status}

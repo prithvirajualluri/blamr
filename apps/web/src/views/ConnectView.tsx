@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { buildAgentEnvBlock, INGEST_ENDPOINT } from '../config';
 
 type ConnectPath = 0 | 1 | 2;
 
@@ -31,13 +32,32 @@ const PATHS = [
   { title: 'Framework adapter', sub: '1 import + 1 decorator', badge: '' },
 ];
 
+const ENV_PLACEHOLDER = buildAgentEnvBlock('bk_live_…your_key');
+
 export function ConnectView() {
   const [path, setPath] = useState<ConnectPath>(0);
+  const [envCopied, setEnvCopied] = useState(false);
+
+  const ingestEndpoint = INGEST_ENDPOINT;
 
   return (
     <div className="page-enter">
-      <div style={{ background: 'var(--goD)', border: '1px solid rgba(215,119,6,.28)', borderRadius: 'var(--rad)', padding: '10px 14px', fontSize: 12.5, color: 'var(--goL)', marginBottom: 14, lineHeight: 1.55 }}>
-        <strong>Local ports:</strong> set <code style={{ fontFamily: 'var(--mono)' }}>BLAMR_ENDPOINT</code> to the <strong>ingest</strong> service (<code style={{ fontFamily: 'var(--mono)' }}>http://localhost:3001/v1</code>) for SDK and MCP emitters. The dashboard API runs on port <code style={{ fontFamily: 'var(--mono)' }}>3000</code> — do not point emitters at it.
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ background: 'var(--goD)', border: '1px solid rgba(215,119,6,.28)', borderRadius: 'var(--rad)', padding: '10px 14px', fontSize: 12.5, color: 'var(--goL)', lineHeight: 1.55, flex: 1 }}>
+          <strong>Ingest URL:</strong> set <code style={{ fontFamily: 'var(--mono)' }}>BLAMR_ENDPOINT</code> to{' '}
+          <code style={{ fontFamily: 'var(--mono)' }}>{ingestEndpoint}</code> — not the dashboard API on port <code style={{ fontFamily: 'var(--mono)' }}>3000</code>.
+        </div>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => {
+            navigator.clipboard.writeText(ENV_PLACEHOLDER).catch(() => {});
+            setEnvCopied(true);
+            setTimeout(() => setEnvCopied(false), 2000);
+          }}
+        >
+          {envCopied ? 'Copied!' : 'Copy .env template'}
+        </button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         {PATHS.map((p, i) => (
@@ -69,7 +89,7 @@ export function ConnectView() {
           </div>
           <div style={{ position: 'relative' }}>
             <CopyBtn getText={() => `export BLAMR_API_KEY=bk_live_...
-export BLAMR_ENDPOINT=http://localhost:3001/v1
+export BLAMR_ENDPOINT=${ingestEndpoint}
 python3 adapters/mcp/blamr_proxy.py run \\
   --workflow-id customer-support \\
   --api-key "$BLAMR_API_KEY" \\
@@ -79,7 +99,7 @@ python3 adapters/mcp/blamr_proxy.py proxy \\
   --workflow-id customer-support \\
   --target https://your-mcp-server.example.com/mcp \\
   --api-key "$BLAMR_API_KEY"`} />
-            <CodeBlock html={'<span style="color:var(--mu)"># stdio MCP server</span>\n$ <span style="color:var(--cyL)">export</span> BLAMR_ENDPOINT=<span style="color:var(--grL)">http://localhost:3001/v1</span>\n$ <span style="color:var(--cyL)">python3</span> adapters/mcp/blamr_proxy.py <span style="color:var(--cyL)">run</span> \\\n  --workflow-id customer-support \\\n  --api-key <span style="color:var(--grL)">"$BLAMR_API_KEY"</span> \\\n  -- npx @modelcontextprotocol/server-filesystem /tmp\n\n<span style="color:var(--mu)"># HTTP / SSE MCP server (uses BLAMR_ENDPOINT from env)</span>\n$ <span style="color:var(--cyL)">python3</span> adapters/mcp/blamr_proxy.py <span style="color:var(--cyL)">proxy</span> \\\n  --target https://your-mcp-server.example.com/mcp \\\n  --api-key <span style="color:var(--grL)">"$BLAMR_API_KEY"</span>'} />
+            <CodeBlock html={`<span style="color:var(--mu)"># stdio MCP server</span>\n$ <span style="color:var(--cyL)">export</span> BLAMR_ENDPOINT=<span style="color:var(--grL)">${ingestEndpoint}</span>\n$ <span style="color:var(--cyL)">python3</span> adapters/mcp/blamr_proxy.py <span style="color:var(--cyL)">run</span> \\\n  --workflow-id customer-support \\\n  --api-key <span style="color:var(--grL)">"$BLAMR_API_KEY"</span> \\\n  -- npx @modelcontextprotocol/server-filesystem /tmp\n\n<span style="color:var(--mu)"># HTTP / SSE MCP server (uses BLAMR_ENDPOINT from env)</span>\n$ <span style="color:var(--cyL)">python3</span> adapters/mcp/blamr_proxy.py <span style="color:var(--cyL)">proxy</span> \\\n  --target https://your-mcp-server.example.com/mcp \\\n  --api-key <span style="color:var(--grL)">"$BLAMR_API_KEY"</span>`} />
           </div>
           <div className="panel" style={{ marginTop: 14 }}>
             <div className="panel-hdr">MCP data flow</div>
@@ -99,12 +119,45 @@ python3 adapters/mcp/blamr_proxy.py proxy \\
 
       {path === 1 && (
         <div>
+          <div style={{ background: 'var(--grD)', border: '1px solid rgba(5,150,105,.28)', borderLeft: '3px solid var(--gr)', borderRadius: 'var(--rad)', padding: '10px 14px', fontSize: 12.5, color: 'var(--muL)', marginBottom: 14, lineHeight: 1.55 }}>
+            <strong style={{ color: 'var(--grL)' }}>Quick start — blamrTrace</strong> wraps any async function and auto-emits edges with previews and confidence. Three lines to your first run.
+          </div>
+          <div style={{ position: 'relative', marginBottom: 14 }}>
+            <CopyBtn getText={() => `import { BlamrEmitter, blamrTrace } from '@blamr/sdk';
+
+const emitter = new BlamrEmitter(
+  { workflowId: 'my-workflow', agentId: 'my-agent' },
+  process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? '${ingestEndpoint}',
+);
+
+const research = blamrTrace(emitter, { agent: 'researcher', callType: 'LLM call' }, async (query: string) => {
+  return await callYourLlm(query);
+});
+
+emitter.startRun();
+await research('What is our refund policy?');
+await emitter.completeRun({ businessFailed: false });`} />
+            <CodeBlock html={`<span style="color:var(--viL)">import</span> { BlamrEmitter, blamrTrace } <span style="color:var(--viL)">from</span> <span style="color:var(--grL)">'@blamr/sdk'</span>;\n\n<span style="color:var(--viL)">const</span> emitter = <span style="color:var(--cyL)">new</span> BlamrEmitter(\n  { workflowId: <span style="color:var(--grL)">'my-workflow'</span>, agentId: <span style="color:var(--grL)">'my-agent'</span> },\n  process.env.<span style="color:var(--cyL)">BLAMR_API_KEY</span>!,\n  process.env.<span style="color:var(--cyL)">BLAMR_ENDPOINT</span> ?? <span style="color:var(--grL)">'${ingestEndpoint}'</span>,\n);\n\n<span style="color:var(--viL)">const</span> research = <span style="color:var(--cyL)">blamrTrace</span>(emitter, { agent: <span style="color:var(--grL)">'researcher'</span> }, <span style="color:var(--viL)">async</span> (query) => callYourLlm(query));\n\nemitter.<span style="color:var(--cyL)">startRun</span>();\n<span style="color:var(--viL)">await</span> <span style="color:var(--cyL)">research</span>(<span style="color:var(--grL)">'What is our refund policy?'</span>);\n<span style="color:var(--viL)">await</span> emitter.<span style="color:var(--cyL)">completeRun</span>({ businessFailed: <span style="color:var(--goL)">false</span> });`} />
+          </div>
+
           <div style={{ background: 'var(--cyD)', border: '1px solid rgba(8,145,178,.25)', borderLeft: '3px solid var(--cy)', borderRadius: 'var(--rad)', padding: '10px 14px', fontSize: 12.5, color: 'var(--muL)', marginBottom: 14, lineHeight: 1.55 }}>
-            Use <code style={{ color: 'var(--cyL)' }}>BlamrEmitter</code> to emit causal edges from any agent runtime. Set <code style={{ color: 'var(--cyL)' }}>BLAMR_ENDPOINT</code> to the ingest URL (default <code style={{ color: 'var(--cyL)' }}>http://localhost:3001/v1</code>). Install: <code style={{ color: 'var(--cyL)' }}>npm install @blamr/sdk</code>. See docs/INSTALL.md.
+            Advanced: use <code style={{ color: 'var(--cyL)' }}>BlamrEmitter.emitEdge</code> directly when you need full control over every field. Install: <code style={{ color: 'var(--cyL)' }}>npm install @blamr/sdk</code>.
           </div>
           <div style={{ position: 'relative' }}>
-            <CopyBtn getText={() => "npm install @blamr/sdk\nimport { BlamrEmitter } from '@blamr/sdk';\n\nconst emitter = new BlamrEmitter(\n  { workflowId: 'my-workflow', agentId: 'my-agent' },\n  process.env.BLAMR_API_KEY!,\n  process.env.BLAMR_ENDPOINT ?? 'http://localhost:3001/v1',\n);\n\nemitter.startRun();\nawait emitter.emitEdge({ from_agent: 'my-agent', to_agent: 'next', confidence_in: 1, confidence_out: 0.9, ... });\nawait emitter.completeRun({ businessFailed: false });" } />
-            <CodeBlock html={'npm install <span style="color:var(--cyL)">@blamr/sdk</span>\n<span style="color:var(--viL)">import</span> { BlamrEmitter } <span style="color:var(--viL)">from</span> <span style="color:var(--grL)">\'@blamr/sdk\'</span>;\n\n<span style="color:var(--viL)">const</span> emitter = <span style="color:var(--cyL)">new</span> <span style="color:var(--cyL)">BlamrEmitter</span>({\n  workflowId: <span style="color:var(--grL)">\'my-workflow\'</span>, agentId: <span style="color:var(--grL)">\'my-agent\'</span>\n}, process.env.<span style="color:var(--cyL)">BLAMR_API_KEY</span>!,\n  process.env.<span style="color:var(--cyL)">BLAMR_ENDPOINT</span> ?? <span style="color:var(--grL)">\'http://localhost:3001/v1\'</span>);\n\nemitter.<span style="color:var(--cyL)">startRun</span>();\n<span style="color:var(--viL)">await</span> emitter.<span style="color:var(--cyL)">emitEdge</span>({ <span style="color:var(--mu)">/* causal edge */</span> });\n<span style="color:var(--viL)">await</span> emitter.<span style="color:var(--cyL)">completeRun</span>({ businessFailed: <span style="color:var(--goL)">false</span> });'} />
+            <CopyBtn getText={() => `npm install @blamr/sdk
+import { BlamrEmitter } from '@blamr/sdk';
+
+const emitter = new BlamrEmitter(
+  { workflowId: 'my-workflow', agentId: 'my-agent' },
+  process.env.BLAMR_API_KEY!,
+  process.env.BLAMR_ENDPOINT ?? '${ingestEndpoint}',
+);
+
+emitter.startRun();
+await emitter.emitEdge({ from_agent: 'my-agent', to_agent: 'next', confidence_in: 1, confidence_out: 0.9, ... });
+await emitter.completeRun({ businessFailed: false });`} />
+            <CodeBlock html={'npm install <span style="color:var(--cyL)">@blamr/sdk</span>\n<span style="color:var(--viL)">import</span> { BlamrEmitter } <span style="color:var(--viL)">from</span> <span style="color:var(--grL)">\'@blamr/sdk\'</span>;\n\n<span style="color:var(--viL)">const</span> emitter = <span style="color:var(--cyL)">new</span> <span style="color:var(--cyL)">BlamrEmitter</span>({\n  workflowId: <span style="color:var(--grL)">\'my-workflow\'</span>, agentId: <span style="color:var(--grL)">\'my-agent\'</span>\n}, process.env.<span style="color:var(--cyL)">BLAMR_API_KEY</span>!,\n  process.env.<span style="color:var(--cyL)">BLAMR_ENDPOINT</span> ?? <span style="color:var(--grL)">\'' + ingestEndpoint + '\'</span>);\n\nemitter.<span style="color:var(--cyL)">startRun</span>();\n<span style="color:var(--viL)">await</span> emitter.<span style="color:var(--cyL)">emitEdge</span>({ <span style="color:var(--mu)">/* causal edge */</span> });\n<span style="color:var(--viL)">await</span> emitter.<span style="color:var(--cyL)">completeRun</span>({ businessFailed: <span style="color:var(--goL)">false</span> });'} />
           </div>
           <div style={{ background: 'var(--bg3)', border: '1px solid var(--b0)', borderRadius: 'var(--rad-lg)', padding: 14, marginTop: 14 }}>
             <div style={{ fontSize: 11, color: 'var(--mu)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Fields to include on each emitEdge call</div>

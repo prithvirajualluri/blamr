@@ -46,7 +46,11 @@ export interface RunDetail {
     reason: string;
     ml_pct?: number;
     drift_component?: string;
+    role?: string;
+    failure_mode?: string;
   }>;
+  propagation_chain?: string[];
+  blame_confidence?: string;
   hop_analysis: Array<{
     hop_index: number;
     agent: string;
@@ -175,6 +179,8 @@ export function buildRunDetail(
       drift_score: number;
     }>;
     ml_fusion?: { model_version: string; rule_weight: number; ml_weight: number } | null;
+    propagation_chain?: string[];
+    blame_confidence?: string;
   } | null,
   confidence: { hops: ConfidenceHop[] } | null,
   intent: { hops: IntentHop[] } | null,
@@ -208,7 +214,11 @@ export function buildRunDetail(
       reason: b.reason,
       ml_pct: b.ml_blame_pct,
       drift_component: b.drift_component,
+      role: b.role,
+      failure_mode: b.failure_mode,
     })),
+    propagation_chain: blame?.propagation_chain ?? [],
+    blame_confidence: blame?.blame_confidence,
     hop_analysis: blame?.hop_analysis ?? [],
     ml_fusion: blame?.ml_fusion ?? null,
     confidence_trace: confidence?.hops ?? edges.map((e) => ({
