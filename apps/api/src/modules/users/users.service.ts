@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import type { CreateUserRequest, InviteUserRequest, UserRole } from '@blamr/types';
 import { UserEntity } from '../../entities/user.entity';
 import { WorkspaceMemberEntity } from '../../entities/workspace-member.entity';

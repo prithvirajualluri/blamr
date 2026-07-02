@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { ApiKeyEntity } from '../entities/api-key.entity';
 
 export interface CachedApiKey {

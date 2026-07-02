@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync:marketing": "bash ../../scripts/sync-marketing-site.sh",
+    "sync:marketing": "node ../../scripts/sync-marketing-site.mjs",
     "prebuild": "npm run sync:marketing",
     "dev": "npm run sync:marketing && vite",
     "build": "tsc && vite build",
