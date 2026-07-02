@@ -5,11 +5,12 @@ import { RunsService } from './runs.service';
 import { WorkflowRunEntity } from '../../entities/workflow-run.entity';
 import { BlameReportEntity } from '../../entities/blame-report.entity';
 import { HopReplayEntity } from '../../entities/hop-replay.entity';
+import { ReasoningTraceEntity } from '../../entities/reasoning-trace.entity';
 import { ClickHouseService } from '../../services/clickhouse.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkflowRunEntity, BlameReportEntity, HopReplayEntity]),
+    TypeOrmModule.forFeature([WorkflowRunEntity, BlameReportEntity, HopReplayEntity, ReasoningTraceEntity]),
   ],
   controllers: [RunsController],
   providers: [RunsService, ClickHouseService],

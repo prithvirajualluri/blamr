@@ -3,10 +3,11 @@ import { Kafka, Consumer, Producer } from 'kafkajs';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
-import type { CausalEdge, ConfidenceGateResult } from '@blamr/types';
+import type { CausalEdge, ConfidenceGateResult, ReasoningTrace } from '@blamr/types';
 import { evaluateConfidenceGate, reconcileEdgeConfidenceChain, resolveWorkflowGate, resolveIntentDriftThreshold, isTelemetryFirst } from '@blamr/types';
 import {
   enrichEdgesWithSemanticDrift,
+  enrichEdgeWithReasoningTrace,
   enrichBlameReasonsWithLlm,
   isLlmBlameReasonEnabled,
   isSemanticDriftEnabled,
@@ -33,6 +34,13 @@ interface RunCompletedEvent {
   confidence_accept_level?: number | null;
   confidence_gate_mode?: 'final' | 'min' | null;
   confidence_gate?: ConfidenceGateResult | null;
+}
+
+interface RunGoalUpdatedEvent {
+  run_id: string;
+  workspace_id: string;
+  goal_snapshot: string;
+  updated_at?: number;
 }
 
 @Injectable()
@@ -66,15 +74,21 @@ export class BlameProcessorService implements OnModuleInit {
     await this.consumer.connect();
     await this.producer.connect();
     await this.consumer.subscribe({ topic: 'blame.needed', fromBeginning: false });
+    await this.consumer.subscribe({ topic: 'runs.goal_updated', fromBeginning: false });
 
     await this.consumer.run({
-      eachMessage: async ({ message }) => {
+      eachMessage: async ({ topic, message }) => {
         if (!message.value) return;
-        const event = JSON.parse(message.value.toString()) as RunCompletedEvent;
         try {
-          await this.processRun(event);
+          if (topic === 'runs.goal_updated') {
+            await this.reEnrichRunForGoalUpdate(
+              JSON.parse(message.value.toString()) as RunGoalUpdatedEvent,
+            );
+            return;
+          }
+          await this.processRun(JSON.parse(message.value.toString()) as RunCompletedEvent);
         } catch (err) {
-          this.logger.error(`Blame processing failed for ${event.run_id}: ${err}`);
+          this.logger.error(`Blame processing failed for topic ${topic}: ${err}`);
         }
       },
     });
@@ -137,6 +151,102 @@ export class BlameProcessorService implements OnModuleInit {
     }
   }
 
+  private async persistEdgeSignals(edges: CausalEdge[]): Promise<void> {
+    if (edges.length === 0) return;
+    try {
+      for (const e of edges) {
+        await this.clickhouse.command({
+          query: `ALTER TABLE causal_edges UPDATE
+                    intent_delta = {intentDelta:Float64},
+                    confidence_out = {confidenceOut:Float64},
+                    signal_source = {signalSource:String}
+                  WHERE run_id = {runId:String} AND hop_index = {hop:Int32} AND from_agent = {from:String}`,
+          query_params: {
+            intentDelta: e.intent_delta,
+            confidenceOut: e.confidence_out,
+            signalSource: e.signal_source ?? '',
+            runId: e.run_id,
+            hop: e.hop_index,
+            from: e.from_agent,
+          },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Could not persist enriched edge signals: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  private async hydrateRunMetadataCache(runId: string): Promise<void> {
+    const row = await this.pg.query<{
+      system_prompt: string | null;
+      goal_snapshot: string | null;
+    }>(
+      'SELECT system_prompt, goal_snapshot FROM workflow_runs WHERE id = $1',
+      [runId],
+    );
+    const meta = row.rows[0];
+    if (!meta) return;
+    if (meta.system_prompt) await this.driftCache.setRunSystemPrompt(runId, meta.system_prompt);
+    if (meta.goal_snapshot) await this.driftCache.setRunGoalSnapshot(runId, meta.goal_snapshot);
+  }
+
+  private async hydrateReasoningTraces(edges: CausalEdge[]): Promise<void> {
+    const traceIds = [...new Set(edges.map((edge) => edge.reasoning_trace_id).filter((id): id is string => Boolean(id)))];
+    if (traceIds.length === 0) return;
+
+    const result = await this.pg.query<{
+      id: string;
+      content: string;
+      model: string;
+      token_count: number | null;
+    }>(
+      'SELECT id, content, model, token_count FROM reasoning_traces WHERE id = ANY($1::text[])',
+      [traceIds],
+    );
+    const tracesById = new Map<string, ReasoningTrace>(
+      result.rows.map((row) => [
+        row.id,
+        {
+          content: row.content,
+          model: row.model,
+          ...(row.token_count != null ? { token_count: row.token_count } : {}),
+        },
+      ]),
+    );
+
+    for (const edge of edges) {
+      if (!edge.reasoning_trace_id || edge.reasoning_trace?.content) continue;
+      const trace = tracesById.get(edge.reasoning_trace_id);
+      if (trace) edge.reasoning_trace = trace;
+    }
+  }
+
+  private async reEnrichRunForGoalUpdate(event: RunGoalUpdatedEvent): Promise<void> {
+    await this.driftCache.setRunGoalSnapshot(event.run_id, event.goal_snapshot);
+    let edges = await this.fetchEdges(event.run_id);
+    if (edges.length === 0) return;
+    await this.hydrateRunMetadataCache(event.run_id);
+    await this.hydrateReasoningTraces(edges);
+    const workspaceSettings = await loadWorkspaceSettings(this.pg, event.workspace_id || edges[0].workspace_id);
+    const intentDriftThreshold = resolveIntentDriftThreshold(workspaceSettings);
+    await enrichEdgesWithSemanticDrift(
+      edges,
+      this.driftCache,
+      {
+        debug: (m) => this.logger.debug(m),
+        warn: (m) => this.logger.warn(m),
+      },
+      { intentDriftThreshold },
+    );
+    for (const edge of edges) {
+      enrichEdgeWithReasoningTrace(edge);
+    }
+    await this.persistEdgeSignals(edges);
+    this.logger.log(`Re-enriched run ${event.run_id} after goal update`);
+  }
+
   private async processRun(event: RunCompletedEvent) {
     let edges = await this.fetchEdges(event.run_id);
     if (edges.length === 0) {
@@ -146,6 +256,8 @@ export class BlameProcessorService implements OnModuleInit {
 
     const workflowId = edges[0].workflow_id;
     const workspaceId = event.workspace_id || edges[0].workspace_id;
+    await this.hydrateRunMetadataCache(event.run_id);
+    await this.hydrateReasoningTraces(edges);
     const workspaceSettings = await loadWorkspaceSettings(this.pg, workspaceId);
     const intentDriftThreshold = resolveIntentDriftThreshold(workspaceSettings);
 
@@ -158,6 +270,10 @@ export class BlameProcessorService implements OnModuleInit {
       },
       { intentDriftThreshold },
     );
+    for (const edge of edges) {
+      enrichEdgeWithReasoningTrace(edge);
+    }
+    await this.persistEdgeSignals(edges);
 
     const gateConfig = resolveWorkflowGate(workflowId, workspaceSettings, {
       confidence_accept_level: event.confidence_accept_level ?? undefined,
@@ -253,6 +369,8 @@ export class BlameProcessorService implements OnModuleInit {
         agents, layout, title, confidence_gate
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
       ON CONFLICT (id) DO UPDATE SET
+        workflow_id = EXCLUDED.workflow_id,
+        workspace_id = EXCLUDED.workspace_id,
         status = EXCLUDED.status,
         ended_at = EXCLUDED.ended_at,
         duration_ms = EXCLUDED.duration_ms,

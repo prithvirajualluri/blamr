@@ -23,9 +23,9 @@ const noopLogger: DriftLogger = { debug: () => {}, warn: () => {} };
 
 function applyDrift(
   edge: CausalEdge,
-  input: string | null,
   output: string,
-  goal: string | null,
+  systemPrompt: string | null,
+  goalSnapshot: string | null,
   embeddings: Map<string, number[]>,
   mutate: boolean,
   intentDriftThreshold: number,
@@ -36,26 +36,15 @@ function applyDrift(
   let semanticDelta = 0;
   let bestSimilarity = 1;
   let measured = false;
-  const isToolHop = edge.call_type === 'Tool call' || edge.call_type === 'MCP call';
 
-  if (isToolHop && input) {
-    const inVec = embeddings.get(input);
-    if (inVec) {
-      const sim = cosineSimilarity(inVec, outVec);
-      bestSimilarity = Math.min(bestSimilarity, sim);
-      semanticDelta = Math.min(semanticDelta, similarityToIntentDelta(sim));
-      measured = true;
-    }
-  }
-
-  if (goal && goal !== output && edge.hop_index > 0) {
-    const goalVec = embeddings.get(goal);
-    if (goalVec) {
-      const sim = cosineSimilarity(goalVec, outVec);
-      bestSimilarity = Math.min(bestSimilarity, sim);
-      semanticDelta = Math.min(semanticDelta, similarityToIntentDelta(sim));
-      measured = true;
-    }
+  for (const baseline of [systemPrompt, goalSnapshot]) {
+    if (!baseline || baseline === output) continue;
+    const baselineVec = embeddings.get(baseline);
+    if (!baselineVec) continue;
+    const sim = cosineSimilarity(baselineVec, outVec);
+    bestSimilarity = Math.min(bestSimilarity, sim);
+    semanticDelta = Math.min(semanticDelta, similarityToIntentDelta(sim));
+    measured = true;
   }
 
   if (!measured) return { intentChanged: false, confidenceChanged: false, hints: null };
@@ -68,14 +57,21 @@ function applyDrift(
   const beforeDelta = edge.intent_delta ?? 0;
   const beforeConf = edge.confidence_out;
   const ceiling = similarityToConfidenceCeiling(bestSimilarity);
+  const overrideZeroIntent =
+    (process.env.BLAMR_OVERRIDE_ZERO_INTENT_DELTA ?? '1').trim().toLowerCase() !== '0'
+    && (beforeDelta === 0 || beforeDelta === -0.02);
 
   if (mutate) {
     edge.intent_delta = Math.min(beforeDelta, semanticDelta);
     edge.confidence_out = Math.min(edge.confidence_out, ceiling);
+    edge.signal_source = 'semantic';
+  } else if (overrideZeroIntent) {
+    edge.intent_delta = semanticDelta;
+    edge.signal_source = 'semantic';
   }
 
   return {
-    intentChanged: mutate && edge.intent_delta !== beforeDelta,
+    intentChanged: edge.intent_delta !== beforeDelta,
     confidenceChanged: mutate && edge.confidence_out !== beforeConf,
     hints: { semanticDelta, ceiling, similarity: bestSimilarity },
   };
@@ -96,34 +92,27 @@ export async function enrichEdgesWithSemanticDrift(
 
   const sorted = [...edges].sort((a, b) => a.hop_index - b.hop_index);
 
-  for (const edge of sorted) {
-    const input = normalizePreview(edge.input_preview);
-    if (input) {
-      const goal = await cache.getRunGoal(edge.run_id);
-      if (!goal) await cache.setRunGoal(edge.run_id, input);
-    }
-  }
-
   const uniqueTexts = new Set<string>();
   const plans: Array<{
     edge: CausalEdge;
-    input: string | null;
     output: string;
-    goal: string | null;
+    systemPrompt: string | null;
+    goalSnapshot: string | null;
   }> = [];
 
   for (const edge of sorted) {
     const output = normalizePreview(edge.output_preview);
     if (!output) continue;
 
-    const input = normalizePreview(edge.input_preview);
-    const goal = await cache.getRunGoal(edge.run_id);
+    const systemPrompt = normalizePreview((await cache.getRunSystemPrompt(edge.run_id)) ?? undefined);
+    const goalSnapshot = normalizePreview((await cache.getRunGoalSnapshot(edge.run_id)) ?? undefined);
+    if (!systemPrompt && !goalSnapshot) continue;
 
-    if (input) uniqueTexts.add(input);
     uniqueTexts.add(output);
-    if (goal) uniqueTexts.add(goal);
+    if (systemPrompt) uniqueTexts.add(systemPrompt);
+    if (goalSnapshot) uniqueTexts.add(goalSnapshot);
 
-    plans.push({ edge, input, output, goal });
+    plans.push({ edge, output, systemPrompt, goalSnapshot });
   }
 
   if (plans.length === 0) return hintsByHop;
@@ -135,9 +124,9 @@ export async function enrichEdgesWithSemanticDrift(
       const beforeConf = plan.edge.confidence_out;
       const { intentChanged, confidenceChanged, hints } = applyDrift(
         plan.edge,
-        plan.input,
         plan.output,
-        plan.goal,
+        plan.systemPrompt,
+        plan.goalSnapshot,
         embeddings,
         mutate,
         intentDriftThreshold,

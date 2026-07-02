@@ -16,6 +16,7 @@ export interface TransportConfig {
 }
 
 export interface QueuedRequest {
+  method?: 'POST' | 'PUT';
   path: string;
   body: unknown;
 }
@@ -63,10 +64,14 @@ export class BlamrTransport {
 
   /** Enqueue a POST body. Resolves immediately unless sync mode. */
   send(path: string, body: unknown): Promise<void> {
-    if (this.cfg.disabled) return Promise.resolve();
-    if (this.cfg.sync) return this.post(path, body);
+    return this.sendWithMethod('POST', path, body);
+  }
 
-    this.memory.push({ path, body });
+  sendWithMethod(method: 'POST' | 'PUT', path: string, body: unknown): Promise<void> {
+    if (this.cfg.disabled) return Promise.resolve();
+    if (this.cfg.sync) return this.post(method, path, body);
+
+    this.memory.push({ method, path, body });
     if (this.memory.length >= this.cfg.maxMemoryQueue) {
       this.spillToDisk(this.memory.splice(0));
     }
@@ -110,7 +115,7 @@ export class BlamrTransport {
     try {
       for (const req of batch) {
         try {
-          await this.post(req.path, req.body);
+          await this.post(req.method ?? 'POST', req.path, req.body);
         } catch {
           this.spillToDisk([req]);
         }
@@ -178,7 +183,7 @@ export class BlamrTransport {
       for (const line of lines) {
         try {
           const req = JSON.parse(line) as QueuedRequest;
-          await this.post(req.path, req.body);
+          await this.post(req.method ?? 'POST', req.path, req.body);
         } catch {
           allOk = false;
           break;
@@ -194,9 +199,9 @@ export class BlamrTransport {
     }
   }
 
-  private async post(reqPath: string, body: unknown): Promise<void> {
+  private async post(method: 'POST' | 'PUT', reqPath: string, body: unknown): Promise<void> {
     const res = await fetch(`${this.endpoint}${reqPath}`, {
-      method: 'POST',
+      method,
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': this.apiKey,

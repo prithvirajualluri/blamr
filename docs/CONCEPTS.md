@@ -19,6 +19,8 @@ Novel fields not in OpenTelemetry or standard trace specs:
 | `influence_score` | 0–1 | Downstream causal weight |
 | `input_preview` / `output_preview` | string | Truncated I/O for trace UI and embeddings |
 | `source_hop_ids` | string[] | Upstream hop edge IDs whose outputs were passed as this hop's input (data-flow lineage) |
+| `reasoning_trace_id` | string | Pointer to a persisted reasoning trace for the hop |
+| `signal_source` | enum | Whether the strongest drift signal came from `semantic`, `reasoning`, or heuristic logic |
 | `edge_hash` | SHA256 | Merkle-chained audit trail |
 
 Agent-side signals use `@blamr/sdk` helpers: `computeHopSignals()` merges lexical, JSON `confidence`, tool scores, and alignment ceilings before ingest.
@@ -156,9 +158,22 @@ No workflow registry required — emit edges with any `workflow_id` and agent na
 
 Ingest returns immediately. Workers enrich edges **asynchronously** before ClickHouse insert:
 
-1. **Tool/MCP hops** — embed `input_preview` vs `output_preview` (e.g. leave intent → payroll policy)
-2. **Downstream hops** — embed run goal (first hop input) vs output
-3. **Merge** — `intent_delta = min(workflow_value, semantic_value)`; `confidence_out = min(reported, semantic_similarity_ceiling)`
+1. **Primary baseline** — embed `system_prompt` vs each hop `output_preview`
+2. **Optional stricter baseline** — if `goal_snapshot` exists, compare against both and keep the worst drift
+3. **Override** — default worker behavior replaces placeholder `intent_delta` values (`0` / `-0.02`) with the measured semantic delta
+4. **Merge** — `confidence_out = min(reported, semantic_similarity_ceiling)` when mutation mode is enabled
+
+---
+
+## Run metadata contract
+
+Consumers own run identity and intent metadata:
+
+- Reuse a run with `startRun(existingId)` when continuing the same execution.
+- Send `system_prompt` once per run. SDK wrappers auto-extract the first system message for OpenAI / Anthropic calls when present.
+- Send `goal_snapshot` only when the consumer has a stable user goal string. blamr does not infer or backfill it.
+
+Workers use `system_prompt` as the canonical intent baseline. `goal_snapshot` is an optional stricter comparator, not a fallback guessed from hop input.
 
 ---
 

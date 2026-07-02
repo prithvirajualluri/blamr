@@ -127,7 +127,8 @@ function blameWeights(edges: CausalEdge[], failed: boolean): Map<string, number>
   sorted.forEach((e) => {
     const { intentHarm, confDrop, inflation } = faultSignals(e);
     const nullBoost = failed ? nullOutputFaultBoost(e) : 0;
-    const localFault = intentHarm * 3 + confDrop * 2 + inflation * 2 + nullBoost;
+    const reasoningBoost = e.signal_source === 'reasoning' ? 2 : 1;
+    const localFault = (intentHarm * 3 + confDrop * 2 + inflation * 2 + nullBoost) * reasoningBoost;
     const w = failed
       ? e.influence_score * (localFault + 0.05)
       : e.influence_score * 0.5;
@@ -240,6 +241,7 @@ export function computeFromEdges(
       is_root: false,
       reason: '',
       confidence_inflated: inflated,
+      ...(edge?.signal_source ? { signal_source: edge.signal_source } : {}),
     };
   });
 
@@ -254,6 +256,13 @@ export function computeFromEdges(
   agentBlames = enriched.agents;
 
   const root = agentBlames[0] ?? { agent: agents[0] ?? 'unknown', blame_pct: 0 };
+  let blameConfidence = enriched.blame_confidence;
+  if (failed && root.signal_source === 'reasoning') {
+    blameConfidence =
+      blameConfidence === 'ambiguous' ? 'medium'
+      : blameConfidence === 'medium' ? 'high'
+      : blameConfidence;
+  }
 
   return {
     run,
@@ -264,7 +273,7 @@ export function computeFromEdges(
       computed_at_ms: Date.now(),
       agents: agentBlames,
       propagation_chain: enriched.propagation_chain,
-      blame_confidence: enriched.blame_confidence,
+      blame_confidence: blameConfidence,
     },
   };
 }

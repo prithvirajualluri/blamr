@@ -22,13 +22,20 @@ class BlamrCallbacks:
         api_key: str | None = None,
         endpoint: str | None = None,
         default_agent: str = "autogen",
+        system_prompt: str | None = None,
     ):
-        self.emitter = BlamrEmitter(workflow_id, default_agent, api_key, endpoint)
+        self.emitter = BlamrEmitter(
+            workflow_id,
+            default_agent,
+            api_key,
+            endpoint,
+            system_prompt=system_prompt,
+        )
         self._hop = 0
 
     def on_agent_message(self, agent_name: str, message: str, metadata: dict | None = None) -> None:
         if not self.emitter.run_id:
-            self.emitter.start_run()
+            self.emitter.start_run(options={"systemPrompt": self.emitter._system_prompt})
         meta = metadata or {}
         self.emitter.emit_edge(
             from_agent=agent_name,
@@ -50,7 +57,7 @@ class BlamrCallbacks:
 
     def start_run(self, run_id: str | None = None) -> str:
         self._hop = 0
-        return self.emitter.start_run(run_id)
+        return self.emitter.start_run(run_id, {"systemPrompt": self.emitter._system_prompt})
 
     def end_run(self, status: str = "success", error: str | None = None) -> dict | None:
         return self.emitter.complete_run(status, error)

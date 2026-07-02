@@ -63,7 +63,6 @@ function orderedAgents(edges: CausalEdge[]): string[] {
 async function buildEmbeddingMap(
   edges: CausalEdge[],
   cache: DriftCache | null,
-  goalHopIndex = 0,
 ): Promise<Map<string, number[]>> {
   if (!cache) return new Map();
   const texts = new Set<string>();
@@ -72,13 +71,14 @@ async function buildEmbeddingMap(
     const output = normalizePreview(e.output_preview);
     if (input) texts.add(input);
     if (output) texts.add(output);
-    if (e.hop_index === goalHopIndex && input) {
-      await cache.setRunGoal(e.run_id, input);
-    }
   }
-  const goalEdge = edges.find((e) => e.hop_index === goalHopIndex) ?? edges[0];
-  const goal = goalEdge ? await cache.getRunGoal(goalEdge.run_id) : null;
-  if (goal) texts.add(goal);
+  const runId = edges[0]?.run_id;
+  if (runId) {
+    const systemPrompt = normalizePreview((await cache.getRunSystemPrompt(runId)) ?? undefined);
+    const goalSnapshot = normalizePreview((await cache.getRunGoalSnapshot(runId)) ?? undefined);
+    if (systemPrompt) texts.add(systemPrompt);
+    if (goalSnapshot) texts.add(goalSnapshot);
+  }
   if (texts.size === 0) return new Map();
   try {
     return await embedTexts([...texts], cache);
@@ -224,10 +224,15 @@ export async function analyzeRunWithMl(
   const mutate = isEdgeMutationEnabled();
   const sorted = [...edges].sort((a, b) => a.hop_index - b.hop_index);
   const driftThreshold = options.intentDriftThreshold ?? 0.2;
-  const goalHopIndex = options.profile?.goal_hop_index ?? 0;
-  const embeddings = await buildEmbeddingMap(sorted, cache, goalHopIndex);
-  const goalEdge = sorted.find((e) => e.hop_index === goalHopIndex) ?? sorted[0];
-  const goal = goalEdge ? normalizePreview(goalEdge.input_preview) : null;
+  const embeddings = await buildEmbeddingMap(sorted, cache);
+  const runId = sorted[0]?.run_id;
+  const systemPrompt = runId && cache
+    ? normalizePreview((await cache.getRunSystemPrompt(runId)) ?? undefined)
+    : null;
+  const goalSnapshot = runId && cache
+    ? normalizePreview((await cache.getRunGoalSnapshot(runId)) ?? undefined)
+    : null;
+  const goal = goalSnapshot ?? systemPrompt;
   const goalVec = goal ? embeddings.get(goal) : undefined;
 
   const hopAnalysis: HopDriftAnalysis[] = [];

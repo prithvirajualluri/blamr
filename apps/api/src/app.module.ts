@@ -22,6 +22,7 @@ import { UserEntity } from './entities/user.entity';
 import { WorkspaceMemberEntity } from './entities/workspace-member.entity';
 import { WorkspaceInviteEntity } from './entities/workspace-invite.entity';
 import { HopReplayEntity } from './entities/hop-replay.entity';
+import { ReasoningTraceEntity } from './entities/reasoning-trace.entity';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { HopReplayEntity } from './entities/hop-replay.entity';
         WorkspaceMemberEntity,
         WorkspaceInviteEntity,
         HopReplayEntity,
+        ReasoningTraceEntity,
       ],
       synchronize: true,
       logging: process.env.NODE_ENV === 'development',

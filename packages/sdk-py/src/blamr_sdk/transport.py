@@ -104,15 +104,18 @@ class BlamrTransport:
     atexit.register(self.close)
 
   def send(self, path: str, body: dict[str, Any]) -> None:
+    self.send_with_method("POST", path, body)
+
+  def send_with_method(self, method: str, path: str, body: dict[str, Any]) -> None:
     if self._disabled:
       return
     if self._sync:
-      self._post(path, body)
+      self._post(method, path, body)
       return
     try:
-      self._mem.put_nowait({"path": path, "body": body})
+      self._mem.put_nowait({"method": method, "path": path, "body": body})
     except queue.Full:
-      self._disk.enqueue({"path": path, "body": body})
+      self._disk.enqueue({"method": method, "path": path, "body": body})
 
   def flush(self) -> None:
     if self._disabled:
@@ -139,7 +142,7 @@ class BlamrTransport:
       if item is None:
         break
       try:
-        self._post(item["path"], item["body"])
+        self._post(item.get("method", "POST"), item["path"], item["body"])
       except Exception:
         self._disk.enqueue(item)
 
@@ -160,7 +163,7 @@ class BlamrTransport:
           continue
         try:
           req = json.loads(line)
-          self._post(req["path"], req["body"])
+          self._post(req.get("method", "POST"), req["path"], req["body"])
         except Exception:
           ok = False
           break
@@ -170,14 +173,14 @@ class BlamrTransport:
         except OSError:
           pass
 
-  def _post(self, path: str, body: dict[str, Any]) -> None:
+  def _post(self, method: str, path: str, body: dict[str, Any]) -> None:
     if not self._api_key:
       raise RuntimeError("BLAMR_API_KEY is required")
     req = urllib.request.Request(
       f"{self._endpoint}{path}",
       data=json.dumps(body).encode(),
       headers={"Content-Type": "application/json", "X-API-Key": self._api_key},
-      method="POST",
+      method=method,
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
       if resp.status >= 400:

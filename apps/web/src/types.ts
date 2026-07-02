@@ -10,6 +10,7 @@ import type {
   RunSpan,
   TraceHop,
   WorkflowProfile,
+  ReasoningTrace,
 } from '@blamr/types';
 import { computeBlamrStatus } from './utils/blamr-status';
 import type { AgentConnectionRow } from './utils/blamr-status';
@@ -29,6 +30,8 @@ export interface RunDetail {
   agents: string[];
   started_at: number;
   layout: RunLayout;
+  goal_snapshot?: string;
+  system_prompt?: string;
   spans: RunSpan[];
   trace_hops: TraceHop[];
   edges: Array<{
@@ -48,6 +51,7 @@ export interface RunDetail {
     drift_component?: string;
     role?: string;
     failure_mode?: string;
+    signal_source?: string;
   }>;
   propagation_chain?: string[];
   blame_confidence?: string;
@@ -149,6 +153,9 @@ function edgesToTraceHops(edges: CausalEdge[], hopMl?: Map<number, { drift_type:
         timestamp_ms: e.timestamp_ms,
         input_preview: e.input_preview || undefined,
         output_preview: e.output_preview || undefined,
+        reasoning_trace: e.reasoning_trace as ReasoningTrace | undefined,
+        reasoning_trace_id: e.reasoning_trace_id || undefined,
+        signal_source: e.signal_source,
         drift_type: ml?.drift_type as TraceHop['drift_type'],
         drift_score: ml?.drift_score,
       };
@@ -204,6 +211,8 @@ export function buildRunDetail(
   return {
     ...summary,
     layout: (run.layout as RunLayout) ?? 'linear',
+    goal_snapshot: typeof run.goal_snapshot === 'string' ? run.goal_snapshot : undefined,
+    system_prompt: typeof run.system_prompt === 'string' ? run.system_prompt : undefined,
     trace_hops: edgesToTraceHops(edges, hopMl),
     spans: edgesToSpans(edges),
     edges: graphEdges,
@@ -216,6 +225,7 @@ export function buildRunDetail(
       drift_component: b.drift_component,
       role: b.role,
       failure_mode: b.failure_mode,
+      signal_source: b.signal_source,
     })),
     propagation_chain: blame?.propagation_chain ?? [],
     blame_confidence: blame?.blame_confidence,

@@ -199,7 +199,7 @@ Before blame is computed, workers enrich raw agent telemetry.
 Embeds I/O previews via local Ollama (`nomic-embed-text` by default):
 
 - **Tool/MCP hops** — compare input preview vs output preview (e.g. leave request → payroll policy)
-- **Downstream hops** — compare run goal (first hop input) vs output
+- **Downstream hops** — compare run goal snapshot vs output
 
 Merge rule (telemetry-first mode, default):
 

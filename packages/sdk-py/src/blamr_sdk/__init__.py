@@ -18,6 +18,7 @@ def wrap_client(
     agent_id: str,
     api_key: str | None = None,
     endpoint: str | None = None,
+    system_prompt: str | None = None,
 ) -> "BlamrWrappedClient":
     return BlamrWrappedClient(
         client=client,
@@ -25,6 +26,7 @@ def wrap_client(
         agent_id=agent_id,
         api_key=api_key or os.environ.get("BLAMR_API_KEY", ""),
         endpoint=endpoint or os.environ.get("BLAMR_ENDPOINT", "http://localhost:3001/v1"),
+        system_prompt=system_prompt,
     )
 
 
@@ -38,12 +40,22 @@ class BlamrWrappedClient:
         agent_id: str,
         api_key: str,
         endpoint: str,
+        system_prompt: str | None = None,
     ):
         self._client = client
-        self.blamr = BlamrEmitter(workflow_id, agent_id, api_key, endpoint)
+        self.blamr = BlamrEmitter(
+            workflow_id,
+            agent_id,
+            api_key,
+            endpoint,
+            system_prompt=system_prompt,
+        )
 
-    def start_run(self, run_id: str | None = None) -> str:
-        return self.blamr.start_run(run_id)
+    def start_run(self, run_id: str | None = None, options: dict[str, Any] | None = None) -> str:
+        return self.blamr.start_run(run_id, options)
+
+    def set_goal_snapshot(self, goal: str) -> None:
+        self.blamr.set_goal_snapshot(goal)
 
     def end_run(self, status: str = "success", error: str | None = None) -> dict | None:
         return self.blamr.complete_run(status, error)

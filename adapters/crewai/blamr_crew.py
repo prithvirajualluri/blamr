@@ -20,6 +20,7 @@ def blamr_crew(
     api_key: str | None = None,
     endpoint: str | None = None,
     agent_id: str = "crew",
+    system_prompt: str | None = None,
 ):
     """Decorator that wraps a CrewAI Crew.kickoff with blamr run lifecycle."""
 
@@ -28,8 +29,18 @@ def blamr_crew(
 
         @wraps(original_kickoff)
         def wrapped_kickoff(self, *args, **kwargs):
-            emitter = BlamrEmitter(workflow_id, agent_id, api_key, endpoint)
-            run_id = emitter.start_run()
+            emitter = BlamrEmitter(
+                workflow_id,
+                agent_id,
+                api_key,
+                endpoint,
+                system_prompt=system_prompt,
+            )
+            run_id = emitter.start_run(
+                options={
+                    "systemPrompt": system_prompt,
+                }
+            )
             start = time.time()
             try:
                 result = original_kickoff(self, *args, **kwargs)

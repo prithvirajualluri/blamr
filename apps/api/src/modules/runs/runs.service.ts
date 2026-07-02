@@ -4,6 +4,7 @@ import { Repository, FindOptionsWhere } from 'typeorm';
 import { WorkflowRunEntity } from '../../entities/workflow-run.entity';
 import { BlameReportEntity } from '../../entities/blame-report.entity';
 import { HopReplayEntity } from '../../entities/hop-replay.entity';
+import { ReasoningTraceEntity } from '../../entities/reasoning-trace.entity';
 import { ClickHouseService } from '../../services/clickhouse.service';
 import { computeFromEdges } from '@blamr/blame';
 import { executeHopReplay, isReplayableHop } from '@blamr/replay';
@@ -39,6 +40,8 @@ export class RunsService {
     private readonly blameRepo: Repository<BlameReportEntity>,
     @InjectRepository(HopReplayEntity)
     private readonly hopReplayRepo: Repository<HopReplayEntity>,
+    @InjectRepository(ReasoningTraceEntity)
+    private readonly reasoningTraceRepo: Repository<ReasoningTraceEntity>,
     private readonly clickhouse: ClickHouseService,
   ) {}
 
@@ -125,7 +128,29 @@ export class RunsService {
   async getById(id: string, workspaceId: string) {
     const run = await this.requireRun(id, workspaceId);
     const edges = await this.clickhouse.getEdgesByRunId(id);
-    return { ...run, edges };
+    const reasoningTraceIds = edges
+      .map((edge) => edge.reasoning_trace_id)
+      .filter((value): value is string => Boolean(value));
+    const traces = reasoningTraceIds.length > 0
+      ? await this.reasoningTraceRepo.findBy({ run_id: id })
+      : [];
+    const traceById = new Map(traces.map((trace) => [trace.id, trace]));
+    return {
+      ...run,
+      edges: edges.map((edge) => {
+        const trace = edge.reasoning_trace_id ? traceById.get(edge.reasoning_trace_id) : undefined;
+        return trace
+          ? {
+              ...edge,
+              reasoning_trace: {
+                content: trace.content,
+                model: trace.model,
+                ...(trace.token_count != null ? { token_count: trace.token_count } : {}),
+              },
+            }
+          : edge;
+      }),
+    };
   }
 
   /** Fast edge-only blame (no ML / Ollama). Used for on-demand recompute and counterfactual replay. */

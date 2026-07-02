@@ -37,6 +37,14 @@ export class ValkeyService {
     if (count === 1) await this.client.expire(key, 60);
     return count <= limit;
   }
+
+  async setRunGoalSnapshot(runId: string, goalSnapshot: string, ttlSec = 86_400): Promise<void> {
+    await this.client.setex(`run:${runId}:goal_snapshot`, ttlSec, goalSnapshot);
+  }
+
+  async setRunSystemPrompt(runId: string, systemPrompt: string, ttlSec = 86_400): Promise<void> {
+    await this.client.setex(`run:${runId}:system_prompt`, ttlSec, systemPrompt);
+  }
 }
 
 @Injectable()

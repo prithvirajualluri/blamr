@@ -26,16 +26,21 @@ export interface BlamrClientExtension {
     intentPreserved?: boolean;
   }): void;
 
-  startRun(runId?: string): string;
+  startRun(
+    runId?: string,
+    options?: { systemPrompt?: string; goal_snapshot?: string },
+  ): string;
   endRun(status: 'success' | 'failed', error?: string): Promise<BlameReport | null>;
   completeRun(options?: CompleteRunOptions): Promise<CompleteRunResult | null>;
   getCurrentRunId(): string | null;
   getWorkflowConfig(): WorkflowProfile | undefined;
+  setGoalSnapshot(goal: string): Promise<void>;
 }
 
 export interface WrapClientOptions {
   workflowId: string;
   agentId: string;
+  systemPrompt?: string;
   apiKey?: string;
   endpoint?: string;
   /** Per-workflow profile: gate thresholds, domain hint, goal hop. */
@@ -68,6 +73,68 @@ function previewFromOpenAiArgs(args: unknown[]): string | undefined {
   return parts.length ? truncatePreview(parts.join(' | ')) : undefined;
 }
 
+function textFromMessageContent(content: unknown): string | undefined {
+  if (typeof content === 'string') return content.trim() || undefined;
+  if (Array.isArray(content)) {
+    const parts = content
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object' && 'text' in item && typeof item.text === 'string') {
+          return item.text.trim();
+        }
+        return '';
+      })
+      .filter(Boolean);
+    return parts.length ? parts.join(' ') : undefined;
+  }
+  return undefined;
+}
+
+function extractOpenAiSystemPrompt(args: unknown[]): string | undefined {
+  const req = args[0] as { messages?: Array<{ role?: string; content?: unknown }> } | undefined;
+  const msg = req?.messages?.find((item) => item.role === 'system');
+  return msg ? textFromMessageContent(msg.content) : undefined;
+}
+
+function extractAnthropicSystemPrompt(args: unknown[]): string | undefined {
+  const req = args[0] as { system?: unknown } | undefined;
+  return textFromMessageContent(req?.system);
+}
+
+function extractOpenAiReasoningTrace(response: unknown): CausalEdge['reasoning_trace'] | undefined {
+  const resp = response as {
+    model?: string;
+    usage?: { reasoning_tokens?: number };
+    choices?: Array<{ message?: { reasoning?: unknown; reasoning_content?: unknown } }>;
+  };
+  const msg = resp.choices?.[0]?.message;
+  const content = textFromMessageContent(msg?.reasoning) ?? textFromMessageContent(msg?.reasoning_content);
+  if (!content) return undefined;
+  return {
+    content,
+    model: resp.model ?? 'unknown',
+    ...(resp.usage?.reasoning_tokens ? { token_count: resp.usage.reasoning_tokens } : {}),
+  };
+}
+
+function extractAnthropicReasoningTrace(response: unknown): CausalEdge['reasoning_trace'] | undefined {
+  const resp = response as {
+    model?: string;
+    content?: Array<{ type?: string; text?: string; thinking?: string }>;
+    usage?: { output_tokens?: number };
+  };
+  const blocks = (resp.content ?? [])
+    .filter((block) => block.type === 'thinking' || typeof block.thinking === 'string')
+    .map((block) => block.text?.trim() || block.thinking?.trim() || '')
+    .filter(Boolean);
+  if (!blocks.length) return undefined;
+  return {
+    content: blocks.join('\n\n'),
+    model: resp.model ?? 'unknown',
+    ...(resp.usage?.output_tokens ? { token_count: resp.usage.output_tokens } : {}),
+  };
+}
+
 async function emitLlmHop(
   emitter: BlamrEmitter,
   options: WrapClientOptions,
@@ -77,6 +144,7 @@ async function emitLlmHop(
   tokensIn: number,
   tokensOut: number,
   model: string,
+  reasoningTrace?: CausalEdge['reasoning_trace'],
 ): Promise<void> {
   const { computeConfidenceOut } = await import('./signals');
   const telemetry = emitter.getTelemetryConfig();
@@ -93,6 +161,7 @@ async function emitLlmHop(
     cost_usd: cost,
     ...(inputPreview ? { input_preview: inputPreview } : {}),
     ...(text ? { output_preview: truncatePreview(text) } : {}),
+    ...(reasoningTrace ? { reasoning_trace: reasoningTrace } : {}),
   });
 }
 
@@ -109,7 +178,9 @@ function wrapOpenAiChat(
           get(compTarget, compProp) {
             if (compProp === 'create') {
               return async (...args: unknown[]) => {
-                if (!emitter.getCurrentRunId()) emitter.startRun();
+                const extractedSystemPrompt = extractOpenAiSystemPrompt(args);
+                if (!emitter.getCurrentRunId()) emitter.startRun(undefined, { systemPrompt: extractedSystemPrompt });
+                else if (extractedSystemPrompt) emitter.setSystemPrompt(extractedSystemPrompt);
                 const start = Date.now();
                 const inputPreview = previewFromOpenAiArgs(args);
                 const createFn = Reflect.get(compTarget, compProp) as (...a: unknown[]) => Promise<unknown>;
@@ -123,6 +194,7 @@ function wrapOpenAiChat(
                 emitter.recordProviderUsage(
                   providerUsageFromOpenAi(resp, Date.now() - start),
                 );
+                const reasoningTrace = extractOpenAiReasoningTrace(resp);
                 await emitLlmHop(
                   emitter,
                   options,
@@ -132,6 +204,7 @@ function wrapOpenAiChat(
                   resp.usage?.prompt_tokens ?? 0,
                   resp.usage?.completion_tokens ?? 0,
                   resp.model ?? 'unknown',
+                  reasoningTrace,
                 );
                 return response;
               };
@@ -154,8 +227,11 @@ function wrapAnthropicMessages(
     get(target, prop) {
       if (prop === 'create') {
         return async (...args: unknown[]) => {
-          if (!emitter.getCurrentRunId()) emitter.startRun();
+          const extractedSystemPrompt = extractAnthropicSystemPrompt(args);
+          if (!emitter.getCurrentRunId()) emitter.startRun(undefined, { systemPrompt: extractedSystemPrompt });
+          else if (extractedSystemPrompt) emitter.setSystemPrompt(extractedSystemPrompt);
           const start = Date.now();
+          const inputPreview = previewFromOpenAiArgs(args);
           const createFn = Reflect.get(target, prop) as (...a: unknown[]) => Promise<unknown>;
           const response = await createFn.apply(target, args);
           const resp = response as {
@@ -164,6 +240,21 @@ function wrapAnthropicMessages(
             content?: Array<{ type?: string; text?: string }>;
           };
           emitter.recordProviderUsage(providerUsageFromAnthropic(resp, Date.now() - start));
+          const text = (resp.content ?? [])
+            .filter((block) => block.type === 'text' && typeof block.text === 'string')
+            .map((block) => block.text)
+            .join(' ');
+          await emitLlmHop(
+            emitter,
+            options,
+            start,
+            inputPreview,
+            text,
+            resp.usage?.input_tokens ?? 0,
+            resp.usage?.output_tokens ?? 0,
+            resp.model ?? 'unknown',
+            extractAnthropicReasoningTrace(resp),
+          );
           return response;
         };
       }
@@ -200,6 +291,9 @@ interface BlamrState {
   lastAgent: string;
   prevHash: string;
   hops: TrackedHop[];
+  systemPrompt: string | null;
+  goalSnapshot: string | null;
+  metadataSyncKey: string | null;
 }
 
 export class BlamrEmitter {
@@ -210,6 +304,9 @@ export class BlamrEmitter {
     lastAgent: '',
     prevHash: '',
     hops: [],
+    systemPrompt: null,
+    goalSnapshot: null,
+    metadataSyncKey: null,
   };
   private readonly telemetry: ReturnType<typeof resolveTelemetryConfig>;
   private readonly transport: BlamrTransport;
@@ -250,7 +347,44 @@ export class BlamrEmitter {
     return this.options.workflowConfig;
   }
 
-  startRun(runId?: string): string {
+  private queueRunMetadata(): void {
+    if (!this.state.runId) return;
+    const hasMetadata = this.state.systemPrompt || this.state.goalSnapshot;
+    if (!hasMetadata) return;
+    const syncKey = JSON.stringify({
+      systemPrompt: this.state.systemPrompt,
+      goalSnapshot: this.state.goalSnapshot,
+    });
+    if (this.state.metadataSyncKey === syncKey) return;
+    this.state.metadataSyncKey = syncKey;
+    void this.transport.sendWithMethod('PUT', `/runs/${this.state.runId}/metadata`, {
+      workflow_id: this.options.workflowId,
+      system_prompt: this.state.systemPrompt,
+      goal_snapshot: this.state.goalSnapshot,
+      system_prompt_agent_id: this.options.agentId,
+    });
+  }
+
+  setSystemPrompt(systemPrompt?: string): void {
+    const next = systemPrompt?.trim() || this.options.systemPrompt?.trim() || null;
+    if (!next || this.state.systemPrompt === next) return;
+    this.state.systemPrompt = next;
+    this.queueRunMetadata();
+  }
+
+  async setGoalSnapshot(goal: string): Promise<void> {
+    const runId = this.state.runId;
+    if (!runId) return;
+    const trimmed = goal.trim();
+    if (!trimmed) return;
+    this.state.goalSnapshot = trimmed;
+    await this.transport.sendWithMethod('PUT', `/runs/${runId}/goal-snapshot`, {
+      goal_snapshot: trimmed,
+    });
+    this.queueRunMetadata();
+  }
+
+  startRun(runId?: string, metadata?: { systemPrompt?: string; goal_snapshot?: string }): string {
     const id = runId || `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this.state = {
       runId: id,
@@ -259,7 +393,11 @@ export class BlamrEmitter {
       lastAgent: this.options.agentId,
       prevHash: id,
       hops: [],
+      systemPrompt: metadata?.systemPrompt?.trim() || this.options.systemPrompt?.trim() || null,
+      goalSnapshot: metadata?.goal_snapshot?.trim() || null,
+      metadataSyncKey: null,
     };
+    this.queueRunMetadata();
     return id;
   }
 
@@ -322,6 +460,9 @@ export class BlamrEmitter {
       ...(edge.input_preview !== undefined ? { input_preview: edge.input_preview } : {}),
       ...(edge.output_preview !== undefined ? { output_preview: edge.output_preview } : {}),
       ...(edge.source_hop_ids?.length ? { source_hop_ids: edge.source_hop_ids } : {}),
+      ...(edge.reasoning_trace ? { reasoning_trace: edge.reasoning_trace } : {}),
+      ...(edge.reasoning_trace_id ? { reasoning_trace_id: edge.reasoning_trace_id } : {}),
+      ...(edge.signal_source ? { signal_source: edge.signal_source } : {}),
     };
 
     if (edge.hop_index !== undefined) {
@@ -423,19 +564,24 @@ export class BlamrEmitter {
   }
 }
 
+function extensionFromEmitter(emitter: BlamrEmitter): BlamrClientExtension {
+  return {
+    markHandoff: (opts) => emitter.markHandoff(opts),
+    startRun: (runId, opts) => emitter.startRun(runId, opts),
+    endRun: (status, error) => emitter.endRun(status, error),
+    completeRun: (opts) => emitter.completeRun(opts),
+    getCurrentRunId: () => emitter.getCurrentRunId(),
+    getWorkflowConfig: () => emitter.getWorkflowConfig(),
+    setGoalSnapshot: (goal) => emitter.setGoalSnapshot(goal),
+  };
+}
+
 export function createBlamrExtension(options: WrapClientOptions): BlamrClientExtension {
   const apiKey = options.apiKey || process.env.BLAMR_API_KEY || '';
   const endpoint = options.endpoint || process.env.BLAMR_ENDPOINT || 'http://localhost:3001/v1';
   const emitter = new BlamrEmitter(options, apiKey, endpoint);
 
-  return {
-    markHandoff: (opts) => emitter.markHandoff(opts),
-    startRun: (runId) => emitter.startRun(runId),
-    endRun: (status, error) => emitter.endRun(status, error),
-    completeRun: (opts) => emitter.completeRun(opts),
-    getCurrentRunId: () => emitter.getCurrentRunId(),
-    getWorkflowConfig: () => emitter.getWorkflowConfig(),
-  };
+  return extensionFromEmitter(emitter);
 }
 
 export function wrapClient<T extends Record<string, unknown>>(
@@ -462,7 +608,7 @@ export function wrapClient<T extends Record<string, unknown>>(
   const handler: ProxyHandler<T> = {
     get(target, prop, receiver) {
       if (prop === 'blamr') {
-        return createBlamrExtension(options);
+        return extensionFromEmitter(emitter);
       }
 
       const value = Reflect.get(target, prop, receiver);

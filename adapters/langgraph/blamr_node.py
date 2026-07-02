@@ -27,21 +27,34 @@ class BlamrNode:
         endpoint: str | None = None,
         to_agent: str | None = None,
         call_type: str = "LLM call",
+        system_prompt: str | None = None,
     ):
-        self.emitter = BlamrEmitter(workflow_id, agent_id, api_key, endpoint)
+        self.emitter = BlamrEmitter(workflow_id, agent_id, api_key, endpoint, system_prompt=system_prompt)
         self.node_fn = node_fn
         self.to_agent = to_agent or agent_id
         self.call_type = call_type
 
     def start_run(self, run_id: str | None = None) -> str:
-        return self.emitter.start_run(run_id)
+        return self.emitter.start_run(
+            run_id,
+            {
+                "systemPrompt": self.emitter._system_prompt,
+                "goal_snapshot": None,
+            },
+        )
 
     def complete_run(self, status: str = "success", error_summary: str | None = None) -> None:
         self.emitter.complete_run(status, error_summary)
 
     def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         if not self.emitter.run_id:
-            self.emitter.start_run(state.get("blamr_run_id"))
+            self.emitter.start_run(
+                state.get("blamr_run_id"),
+                {
+                    "systemPrompt": state.get("blamr_system_prompt"),
+                    "goal_snapshot": state.get("blamr_goal_snapshot"),
+                },
+            )
         import time
 
         start = time.time()

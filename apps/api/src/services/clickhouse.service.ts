@@ -40,6 +40,8 @@ export class ClickHouseService implements OnModuleInit {
         cost_usd: e.cost_usd,
         prev_hash: e.prev_hash,
         edge_hash: e.edge_hash,
+        reasoning_trace_id: e.reasoning_trace_id ?? '',
+        signal_source: e.signal_source ?? '',
       })),
       format: 'JSONEachRow',
     });

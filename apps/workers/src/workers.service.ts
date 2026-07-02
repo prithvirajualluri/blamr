@@ -2,9 +2,11 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { Kafka, Consumer, Producer } from 'kafkajs';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import Redis from 'ioredis';
-import type { CausalEdge } from '@blamr/types';
+import { Pool } from 'pg';
+import type { CausalEdge, ReasoningTrace } from '@blamr/types';
 import {
   enrichEdgesWithSemanticDrift,
+  enrichEdgeWithReasoningTrace,
   isSemanticDriftEnabled,
   semanticSettleMs,
 } from '@blamr/semantic';
@@ -17,6 +19,7 @@ export class ClickHouseWriterService implements OnModuleInit {
   private readonly logger = new Logger(ClickHouseWriterService.name);
   private consumer!: Consumer;
   private clickhouse!: ClickHouseClient;
+  private pg!: Pool;
   private buffer: CausalEdge[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private driftCache!: RedisDriftCache;
@@ -25,6 +28,9 @@ export class ClickHouseWriterService implements OnModuleInit {
     this.clickhouse = createClient({
       url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
       database: process.env.CLICKHOUSE_DATABASE || 'blamr',
+    });
+    this.pg = new Pool({
+      connectionString: process.env.DATABASE_URL || 'postgresql://blamr:blamr_dev@localhost:5432/blamr',
     });
     this.driftCache = new RedisDriftCache(
       new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { lazyConnect: true }),
@@ -59,6 +65,37 @@ export class ClickHouseWriterService implements OnModuleInit {
     this.logger.log('ClickHouse writer started');
   }
 
+  private async hydrateReasoningTraces(edges: CausalEdge[]): Promise<void> {
+    const traceIds = [...new Set(edges.map((edge) => edge.reasoning_trace_id).filter((id): id is string => Boolean(id)))];
+    if (traceIds.length === 0) return;
+
+    const result = await this.pg.query<{
+      id: string;
+      content: string;
+      model: string;
+      token_count: number | null;
+    }>(
+      'SELECT id, content, model, token_count FROM reasoning_traces WHERE id = ANY($1::text[])',
+      [traceIds],
+    );
+    const tracesById = new Map<string, ReasoningTrace>(
+      result.rows.map((row) => [
+        row.id,
+        {
+          content: row.content,
+          model: row.model,
+          ...(row.token_count != null ? { token_count: row.token_count } : {}),
+        },
+      ]),
+    );
+
+    for (const edge of edges) {
+      if (!edge.reasoning_trace_id || edge.reasoning_trace?.content) continue;
+      const trace = tracesById.get(edge.reasoning_trace_id);
+      if (trace) edge.reasoning_trace = trace;
+    }
+  }
+
   private async flush() {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -72,6 +109,10 @@ export class ClickHouseWriterService implements OnModuleInit {
         debug: (m) => this.logger.debug(m),
         warn: (m) => this.logger.warn(m),
       });
+      await this.hydrateReasoningTraces(batch);
+      for (const edge of batch) {
+        enrichEdgeWithReasoningTrace(edge);
+      }
 
       await this.clickhouse.insert({
         table: 'causal_edges',

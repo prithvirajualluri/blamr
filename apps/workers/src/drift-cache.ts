@@ -4,12 +4,20 @@ import type { DriftCache } from '@blamr/semantic';
 export class RedisDriftCache implements DriftCache {
   constructor(private readonly client: Redis) {}
 
-  async getRunGoal(runId: string): Promise<string | null> {
-    return this.client.get(`run:${runId}:goal`);
+  async getRunSystemPrompt(runId: string): Promise<string | null> {
+    return this.client.get(`run:${runId}:system_prompt`);
   }
 
-  async setRunGoal(runId: string, goal: string, ttlSec = 86_400): Promise<void> {
-    await this.client.setex(`run:${runId}:goal`, ttlSec, goal);
+  async getRunGoalSnapshot(runId: string): Promise<string | null> {
+    return this.client.get(`run:${runId}:goal_snapshot`);
+  }
+
+  async setRunSystemPrompt(runId: string, systemPrompt: string, ttlSec = 86_400): Promise<void> {
+    await this.client.setex(`run:${runId}:system_prompt`, ttlSec, systemPrompt);
+  }
+
+  async setRunGoalSnapshot(runId: string, goalSnapshot: string, ttlSec = 86_400): Promise<void> {
+    await this.client.setex(`run:${runId}:goal_snapshot`, ttlSec, goalSnapshot);
   }
 
   async getEmbedding(hash: string): Promise<number[] | null> {

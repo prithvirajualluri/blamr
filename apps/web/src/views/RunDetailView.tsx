@@ -29,6 +29,12 @@ export type DetailTab = 'graph' | 'trace' | 'cost' | 'blame' | 'timeline';
 
 const ALL_TABS: DetailTab[] = ['graph', 'trace', 'cost', 'blame', 'timeline'];
 
+function signalSourceVariant(source?: string): 'red' | 'amb' | 'mu' {
+  if (source === 'reasoning') return 'red';
+  if (source === 'semantic') return 'amb';
+  return 'mu';
+}
+
 export function RunDetailView({ runId, tab: controlledTab, onTabChange, run: runProp, loading: loadingProp, error: errorProp }: RunDetailViewProps) {
   const internal = useRunDetail(runProp === undefined ? runId : null);
   const run = runProp !== undefined ? runProp : internal.run;
@@ -110,6 +116,24 @@ export function RunDetailView({ runId, tab: controlledTab, onTabChange, run: run
       )}
 
       {run.error && <div className="err-box"><strong>Failure: </strong>{run.error}</div>}
+
+      {(run.goal_snapshot || run.system_prompt) && (
+        <div className="panel" style={{ marginBottom: 12 }}>
+          <div className="panel-hdr">Run intent</div>
+          {run.goal_snapshot && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--mu)' }}>Goal snapshot</div>
+              <pre className="trace-io-pre">{run.goal_snapshot}</pre>
+            </div>
+          )}
+          {run.system_prompt && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--mu)' }}>System prompt</div>
+              <pre className="trace-io-pre">{run.system_prompt}</pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {run.confidence_gate && (
         <div
@@ -319,6 +343,11 @@ function TraceHopCard({
                   {hop.drift_score != null ? ` ${Math.round(hop.drift_score * 100)}%` : ''}
                 </Badge>
               )}
+              {hop.signal_source && (
+                <Badge variant={signalSourceVariant(hop.signal_source)}>
+                  {hop.signal_source}
+                </Badge>
+              )}
               <RunTraceBadge tracing />
             </div>
             <div className="trace-meta" style={{ marginTop: 4 }}>
@@ -397,6 +426,13 @@ function TraceHopCard({
           ) : (
             <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 8, paddingLeft: 18 }}>
               No input/output captured for this hop. Re-run with an updated SDK agent to record I/O previews.
+            </div>
+          )}
+          {hop.reasoning_trace?.content && (
+            <div style={{ marginTop: 8, paddingLeft: 18 }}>
+              <CollapsibleSection title={`Reasoning trace${hop.reasoning_trace.model ? ` · ${hop.reasoning_trace.model}` : ''}`}>
+                <pre className="trace-io-pre">{hop.reasoning_trace.content}</pre>
+              </CollapsibleSection>
             </div>
           )}
           {runComplete && (
@@ -505,6 +541,9 @@ function AttributionTab({ run }: { run: RunDetail }) {
               )}
               {b.drift_component && b.drift_component !== 'none' && (
                 <span className="blame-drift-tag">{driftLabel(b.drift_component)}</span>
+              )}
+              {b.signal_source && (
+                <Badge variant={signalSourceVariant(b.signal_source)}>{b.signal_source}</Badge>
               )}
               <div className="blame-track">
                 <div className="blame-fill" style={{ width: `${(b.pct / mx) * 100}%`, background: barColor }} />

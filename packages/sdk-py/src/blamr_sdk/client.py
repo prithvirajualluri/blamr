@@ -29,6 +29,7 @@ class BlamrEmitter:
         endpoint: str | None = None,
         *,
         sync_ingest: bool | None = None,
+        system_prompt: str | None = None,
     ):
         self.workflow_id = workflow_id
         self.agent_id = agent_id
@@ -45,6 +46,9 @@ class BlamrEmitter:
         self._last_agent = agent_id
         self._prev_hash = ""
         self._provider_usage_queue: list[ProviderUsage] = []
+        self._system_prompt = system_prompt.strip() if system_prompt and system_prompt.strip() else None
+        self._goal_snapshot: str | None = None
+        self._metadata_sync_key: str | None = None
 
     def record_provider_usage(self, usage: ProviderUsage) -> None:
         self._provider_usage_queue.append(usage)
@@ -54,12 +58,73 @@ class BlamrEmitter:
             return None
         return self._provider_usage_queue.pop(0)
 
-    def start_run(self, run_id: str | None = None) -> str:
+    def _queue_run_metadata(self) -> None:
+        if not self._run_id:
+            return
+        if not self._system_prompt and not self._goal_snapshot:
+            return
+        sync_key = json.dumps(
+            {
+                "system_prompt": self._system_prompt,
+                "goal_snapshot": self._goal_snapshot,
+            },
+            sort_keys=True,
+        )
+        if self._metadata_sync_key == sync_key:
+            return
+        self._metadata_sync_key = sync_key
+        self._transport.send_with_method(
+            "PUT",
+            f"/runs/{self._run_id}/metadata",
+            {
+                "workflow_id": self.workflow_id,
+                "system_prompt": self._system_prompt,
+                "goal_snapshot": self._goal_snapshot,
+                "system_prompt_agent_id": self.agent_id,
+            },
+        )
+
+    def set_system_prompt(self, system_prompt: str | None) -> None:
+        value = system_prompt.strip() if system_prompt and system_prompt.strip() else None
+        if value == self._system_prompt:
+            return
+        self._system_prompt = value
+        self._queue_run_metadata()
+
+    def set_goal_snapshot(self, goal_snapshot: str) -> None:
+        if not self._run_id:
+            return
+        value = goal_snapshot.strip()
+        if not value:
+            return
+        self._goal_snapshot = value
+        self._transport.send_with_method(
+            "PUT",
+            f"/runs/{self._run_id}/goal-snapshot",
+            {"goal_snapshot": value},
+        )
+        self._queue_run_metadata()
+
+    def start_run(
+        self,
+        run_id: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> str:
         self._run_id = run_id or f"run_{int(time.time() * 1000)}_{os.urandom(3).hex()}"
         self._hop_index = 0
         self._last_confidence_out = 1.0
         self._last_agent = self.agent_id
         self._prev_hash = self._run_id
+        self._goal_snapshot = None
+        self._metadata_sync_key = None
+        if options:
+            if "systemPrompt" in options:
+                self._system_prompt = (
+                    str(options["systemPrompt"]).strip() if options["systemPrompt"] else None
+                )
+            if "goal_snapshot" in options and options["goal_snapshot"]:
+                self._goal_snapshot = str(options["goal_snapshot"]).strip()
+        self._queue_run_metadata()
         return self._run_id
 
     @property
@@ -111,6 +176,9 @@ class BlamrEmitter:
                 edge[key] = _truncate(str(enriched[key]))
         if enriched.get("source_hop_ids"):
             edge["source_hop_ids"] = list(enriched["source_hop_ids"])
+        for key in ("reasoning_trace", "reasoning_trace_id"):
+            if enriched.get(key):
+                edge[key] = enriched[key]
 
         self._transport.send("/edges", edge)
         self._hop_index = max(self._hop_index, hop + 1)

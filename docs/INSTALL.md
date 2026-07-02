@@ -223,6 +223,21 @@ await emitter.emitEdge({
 await emitter.completeRun({ businessFailed: false });
 ```
 
+### Run metadata
+
+Attach run intent explicitly at the start of a run:
+
+```typescript
+const runId = emitter.startRun('existing-run-id', {
+  systemPrompt: 'Answer only with PTO policy guidance.',
+  goal_snapshot: 'Check remaining leave balance for the user.',
+});
+
+await emitter.setGoalSnapshot('Escalate to manager approval for policy exception');
+```
+
+`wrapClient()` auto-posts the first OpenAI / Anthropic system prompt once per run. `goal_snapshot` stays consumer-owned and is never inferred from hop input.
+
 ### Automatic usage telemetry (tokens & cost)
 
 If your agent already sends `model` and I/O previews but omits `tokens_in`, `tokens_out`, or `cost_usd`, the SDK **enriches each `emitEdge` automatically** (default on):
@@ -438,6 +453,39 @@ emitter.emit_edge(
 )
 emitter.complete_run("success")
 ```
+
+Python run metadata:
+
+```python
+run_id = emitter.start_run(
+    "existing-run-id",
+    {
+        "systemPrompt": "Answer only with PTO policy guidance.",
+        "goal_snapshot": "Check remaining leave balance for the user.",
+    },
+)
+
+emitter.set_goal_snapshot("Escalate to manager approval for policy exception")
+```
+
+### Reasoning traces
+
+Agents may attach provider reasoning when available:
+
+```typescript
+await emitter.emitEdge({
+  from_agent: 'planner',
+  to_agent: 'planner',
+  call_type: 'LLM call',
+  model: 'o1',
+  reasoning_trace: {
+    content: 'I do not have enough evidence to approve this request yet.',
+    model: 'o1',
+  },
+});
+```
+
+blamr stores the full reasoning body outside ClickHouse and keeps a `reasoning_trace_id` pointer on the edge for run detail views and reasoning-backed drift overrides.
 
 ### Automatic usage telemetry
 

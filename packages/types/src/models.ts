@@ -16,6 +16,12 @@ export type KeyEnvironment = 'live' | 'test';
 export type KeyStatus = 'active' | 'revoked';
 export type Plan = 'oss' | 'cloud' | 'enterprise';
 
+export interface ReasoningTrace {
+  content: string;
+  model: string;
+  token_count?: number;
+}
+
 export interface CausalEdge {
   id: string;
   run_id: string;
@@ -43,6 +49,10 @@ export interface CausalEdge {
   output_preview?: string;
   /** Upstream hop edge ids whose outputs were consumed as this hop's input (data-flow lineage). */
   source_hop_ids?: string[];
+  /** Reasoning trace content may be hydrated by read APIs; raw storage lives in reasoning_traces. */
+  reasoning_trace?: ReasoningTrace;
+  reasoning_trace_id?: string;
+  signal_source?: 'reasoning' | 'heuristic' | 'semantic';
 }
 
 export interface WorkflowRun {
@@ -61,6 +71,10 @@ export interface WorkflowRun {
   agents: string[];
   layout: RunLayout;
   edges: CausalEdge[];
+  goal_snapshot?: string;
+  system_prompt?: string;
+  system_prompt_hash?: string;
+  system_prompt_agent_id?: string;
 }
 
 export type DriftType =
@@ -86,6 +100,7 @@ export interface AgentBlame {
   ml_blame_pct?: number;
   /** Primary drift type attributed to this agent. */
   drift_component?: DriftType;
+  signal_source?: 'reasoning' | 'heuristic' | 'semantic';
 }
 
 export interface HopDriftAnalysis {
@@ -207,6 +222,9 @@ export interface TraceHop {
   input_preview?: string;
   output_preview?: string;
   source_hop_ids?: string[];
+  reasoning_trace?: ReasoningTrace;
+  reasoning_trace_id?: string;
+  signal_source?: 'reasoning' | 'heuristic' | 'semantic';
   /** ML drift classification (populated in blame report hop_analysis). */
   drift_type?: DriftType;
   drift_score?: number;

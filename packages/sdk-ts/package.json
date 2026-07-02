@@ -31,9 +31,9 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build -w @blamr/types && tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node --test dist/signals.test.js dist/telemetry.test.js dist/transport.test.js dist/lineage.test.js"
+    "test": "npm run build && node --test dist/signals.test.js dist/telemetry.test.js dist/transport.test.js dist/lineage.test.js dist/wrap-client.test.js"
   },
   "dependencies": {
     "@blamr/types": "*"
